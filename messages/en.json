@@ -1,0 +1,270 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "expenses": "Expenses",
+    "budget": "Budget",
+    "profile": "Profile",
+    "signin": "Sign In",
+    "signup": "Sign Up"
+  },
+  "footer": {
+    "product": "Product",
+    "legal": "Legal",
+    "copyright": "© 2024 ExpenseIQ. All rights reserved.",
+    "tagline": "Built for clarity. Designed for control.",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "support": "Support"
+  },
+  "login": {
+    "heroHeading": "Your finances, finally under control.",
+    "heroBody": "ExpenseIQ gives you a real-time view of every dollar you spend — by category, by month, by habit. Sign in to pick up right where you left off.",
+    "hero": [
+      "Track spending across 7 smart categories — Food, Transport, Bills, and more",
+      "Live budget alerts so you never blow past your monthly limit",
+      "Beautiful charts that turn raw numbers into clear financial insight"
+    ],
+    "formHeading": "Welcome back",
+    "formBody": "Enter your email and password to access your ExpenseIQ dashboard.",
+    "formCta": "Sign in to ExpenseIQ",
+    "form": [
+      "Email — your registered email address, e.g. alex@example.com",
+      "Password — at least 8 characters, case-sensitive",
+      "Forgot your password? — request a reset link sent to your inbox"
+    ],
+    "signupHeading": "New to ExpenseIQ?",
+    "signupBody": "Create a free account in under a minute — no credit card required.",
+    "signupCta": "Create your free account",
+    "footerBody": "© 2024 ExpenseIQ. All rights reserved.",
+    "footerLinks": [
+      "Privacy Policy",
+      "Terms of Service",
+      "Support"
+    ],
+    "emailLabel": "Email",
+    "emailPlaceholder": "you@example.com",
+    "errorEmailNotConfirmed": "Please verify your email before logging in.",
+    "errorGeneric": "Something went wrong. Please try again.",
+    "errorInvalidCredentials": "Invalid email or password.",
+    "feature1": "Track spending in real-time",
+    "feature2": "Categorize expenses automatically",
+    "feature3": "Generate detailed reports",
+    "forgotPassword": "Forgot password?",
+    "heading": "Welcome back",
+    "heroBadge": "Secure & Fast",
+    "hidePassword": "Hide",
+    "noAccount": "Don't have an account?",
+    "orDivider": "or",
+    "passwordLabel": "Password",
+    "passwordPlaceholder": "••••••••",
+    "showPassword": "Show",
+    "signUpLink": "Sign up",
+    "signingIn": "Signing in...",
+    "subheading": "Manage your expenses smarter",
+    "submitButton": "Sign in",
+    "successMessage": "Welcome! Redirecting..."
+  },
+  "signup": {
+    "heroHeading": "Take control of every dollar you spend",
+    "heroBody": "ExpenseIQ gives you a real-time, intelligent view of your finances — track expenses by category, set monthly budgets, and spot overspending before it happens. Join thousands of users who finally know where their money goes.",
+    "hero": [
+      "Secured by Supabase Auth — your data stays yours",
+      "Live dashboard updates the moment you log an expense",
+      "Per-category budget limits with instant over-budget alerts",
+      "Works beautifully on mobile, tablet, and desktop"
+    ],
+    "formHeading": "Create your free account",
+    "formBody": "Sign up in under 30 seconds — no credit card required. Your personal finance dashboard is ready the moment you confirm your email.",
+    "formCta": "Create account",
+    "form": [
+      "Full name — e.g. Alex Johnson",
+      "Email address — e.g. alex@example.com",
+      "Password — minimum 8 characters",
+      "Confirm password — must match above"
+    ],
+    "loginHeading": "Already have an account?",
+    "loginBody": "Welcome back — sign in to your ExpenseIQ dashboard and pick up right where you left off.",
+    "loginCta": "Sign in to ExpenseIQ",
+    "footerBody": "© 2024 ExpenseIQ. All rights reserved.",
+    "footerLinks": [
+      "Privacy Policy",
+      "Terms of Service",
+      "Support"
+    ]
+  },
+  "dashboard": {
+    "headerHeading": "Good morning, Alex",
+    "headerBody": "Here's a snapshot of your finances for November 2024. Your spending is on track — you've used 68% of your monthly budget across all categories.",
+    "headerCta": "Add Expense",
+    "header": [
+      "Breadcrumb: Home › Dashboard",
+      "Page subtitle: November 2024 — Monthly Overview",
+      "Quick action: + Add Expense → /expenses/add",
+      "Quick action: View All Expenses → /expenses"
+    ],
+    "summaryHeading": "Your Month at a Glance",
+    "summaryBody": "Four key metrics updated in real time as you log new expenses. Amber indicators signal categories approaching their budget limit.",
+    "summaryCards": [
+      {
+        "title": "Total Spent",
+        "value": "$2,184.50",
+        "detail": "spent across all categories this month",
+        "trend": "+12% vs last month",
+        "color": "primary"
+      },
+      {
+        "title": "Monthly Budget",
+        "value": "$3,200.00",
+        "detail": "your combined limit across all active categories",
+        "trend": "68% used",
+        "color": "accent"
+      },
+      {
+        "title": "Remaining Balance",
+        "value": "$1,015.50",
+        "detail": "available to spend before month end",
+        "trend": "On Track",
+        "color": "success"
+      },
+      {
+        "title": "Top Category",
+        "value": "Food & Dining",
+        "detail": "$640.00 spent — 32% of total spend",
+        "trend": "80% of category budget used",
+        "color": "accent"
+      }
+    ],
+    "chartsHeading": "Spending Trends & Category Breakdown",
+    "chartsBody": "The bar chart tracks your daily and monthly spend patterns. The donut chart shows how your budget is distributed across categories.",
+    "recentHeading": "Recent Expenses",
+    "recentBody": "Your 5 most recent transactions, updated live. Click any row to edit.",
+    "recentCta": "View All Expenses",
+    "recentExpenses": [
+      {
+        "title": "Grocery Run",
+        "category": "Food & Dining",
+        "amount": "$87.40",
+        "date": "Nov 14, 2024",
+        "badge": "Food"
+      },
+      {
+        "title": "Uber to Airport",
+        "category": "Transport",
+        "amount": "$34.20",
+        "date": "Nov 13, 2024",
+        "badge": "Transport"
+      },
+      {
+        "title": "Netflix Subscription",
+        "category": "Entertainment",
+        "amount": "$15.99",
+        "date": "Nov 12, 2024",
+        "badge": "Entertainment"
+      },
+      {
+        "title": "Electricity Bill",
+        "category": "Bills",
+        "amount": "$112.00",
+        "date": "Nov 11, 2024",
+        "badge": "Bills"
+      },
+      {
+        "title": "Pharmacy",
+        "category": "Health",
+        "amount": "$28.75",
+        "date": "Nov 10, 2024",
+        "badge": "Health"
+      }
+    ],
+    "ctaHeading": "Stay on Top of Every Dollar",
+    "ctaBody": "Log expenses as they happen, set category budgets that match your lifestyle, and let ExpenseIQ surface the patterns that matter — before they become problems.",
+    "ctaPrimary": "Add Your First Expense",
+    "ctaSecondary": "Manage Budgets",
+    "ctaTertiary": "View full expense history"
+  },
+  "expenses": {
+    "headerHeading": "All Expenses",
+    "headerBody": "Every transaction in one place. Sort, search, and drill into your spending history.",
+    "headerCta": "Add Expense",
+    "header": [
+      "Navigate to Dashboard for a high-level summary of your monthly spend",
+      "Use Budget Settings to set per-category limits that keep your finances on track",
+      "Click any row to edit the expense or hit the trash icon to delete it instantly"
+    ],
+    "filtersHeading": "Filter & Search",
+    "filtersBody": "Narrow down your expenses by date range, category, or keyword. Filters apply instantly.",
+    "filters": [
+      "Search by keyword — match expense titles like 'Uber', 'Netflix', or 'Grocery Run'",
+      "Filter by category — Food, Transport, Shopping, Bills, Health, Entertainment, or Other",
+      "Set a custom date range — pick any start and end date to isolate a specific period",
+      "Sort by amount (high to low or low to high) or by date (newest or oldest first)",
+      "Reset all filters with one click to return to the full unfiltered expense list"
+    ],
+    "tableHeading": "Expense Entries",
+    "tableBody": "Your full transaction log, sorted by date descending by default.",
+    "expenseTable": [
+      "Title — a short description of the expense",
+      "Category — color-coded badge showing Food, Transport, Bills, Health, Shopping, Entertainment, or Other",
+      "Amount — displayed in your preferred currency with two decimal precision",
+      "Date — the expense date formatted as MMM DD, YYYY",
+      "Notes — optional memo visible on hover via tooltip",
+      "Actions — Edit button opens the expense form pre-filled; Delete triggers a confirmation modal",
+      "Rows are highlighted on hover with an indigo glow",
+      "Clicking the Amount column header toggles ascending / descending sort",
+      "Clicking the Date column header toggles newest-first / oldest-first ordering",
+      "Each row shows a category icon alongside the badge for fast visual scanning"
+    ],
+    "paginationHeading": "Page Navigation",
+    "paginationBody": "Expenses are paginated at 20 rows per page.",
+    "pagination": [
+      "Previous — go back one page; disabled and dimmed when you're on the first page",
+      "Page indicator — shows current page and total, e.g. 'Page 3 of 7'",
+      "Next — advance one page; disabled and dimmed when you've reached the last page",
+      "Direct page jump — type a page number and press Enter to skip straight to that page",
+      "Results count — displays total matching expenses, e.g. '134 expenses found'"
+    ],
+    "emptyHeading": "No Expenses Found",
+    "emptyBody": "When no expenses match your current filters, or your account is brand new, this state appears.",
+    "emptyCta": "Add Your First Expense",
+    "emptyState": [
+      "If filters are active — 'No expenses match your search. Try adjusting the date range, category, or keyword.'",
+      "If the account is new — 'You haven't logged any expenses yet. Hit the button below to record your first one.'",
+      "Clear Filters button — resets all active filters and returns to the full expense list",
+      "Add Expense shortcut — takes you directly to /expenses/add"
+    ]
+  },
+  "budget": {
+    "heading": "Budget Settings",
+    "body": "Set monthly spending limits for each category. ExpenseIQ will alert you when you're approaching or over your limit.",
+    "overviewTitle": "Total Monthly Budget",
+    "saveButton": "Save Budget Settings",
+    "resetButton": "Reset to Defaults"
+  },
+  "profile": {
+    "heading": "Account Settings",
+    "body": "Manage your personal information, preferences, and security settings.",
+    "accountSection": "Account Information",
+    "preferencesSection": "Preferences",
+    "securitySection": "Security",
+    "logoutButton": "Sign Out",
+    "saveButton": "Save Changes"
+  },
+  "common": {
+    "loading": "Loading...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "edit": "Edit",
+    "add": "Add",
+    "search": "Search",
+    "filter": "Filter",
+    "reset": "Reset",
+    "confirm": "Confirm",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "close": "Close",
+    "submit": "Submit",
+    "currency": "USD"
+  }
+}

@@ -1,0 +1,34 @@
+"use client";
+
+import { useEffect } from "react";
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  useEffect(() => {
+    // eslint-disable-next-line no-console
+    console.error(error);
+  }, [error]);
+
+  return (
+    <div data-atomic-error="1" data-atomic-error-message={String(error?.message ?? "")} style={{ minHeight: "60vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
+      <div style={{ textAlign: "center", maxWidth: "30rem" }}>
+        <div style={{ fontSize: "2.5rem", marginBottom: "0.75rem" }}>⚠️</div>
+        <h2 style={{ fontSize: "1.5rem", fontWeight: 700, marginBottom: "0.5rem" }}>Something went wrong</h2>
+        <p style={{ color: "#6b7280", marginBottom: "1.5rem" }}>
+          This section hit an unexpected error. You can try again.
+        </p>
+        <button
+          onClick={() => reset()}
+          style={{ background: "#7c3aed", color: "#fff", fontWeight: 600, padding: "0.6rem 1.25rem", borderRadius: "0.6rem", border: "none", cursor: "pointer" }}
+        >
+          Try again
+        </button>
+      </div>
+    </div>
+  );
+}
