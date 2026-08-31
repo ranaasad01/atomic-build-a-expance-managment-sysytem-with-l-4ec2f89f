@@ -1,474 +1,534 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Mail, DollarSign, Camera, Save, AlertCircle, CheckCircle, Loader2, Shield, Bell, Palette } from 'lucide-react';
+import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { User, Mail, Lock, Save, AlertCircle, Check, ArrowLeft } from 'lucide-react';
 import { Reveal } from "@/components/Reveal";
 import { fadeInUp, staggerContainer } from "@/lib/motion";
-import { BRAND, EXPENSE_CATEGORIES } from "@/lib/data";
-type formatCurrency = any;
-const formatCurrency: any = [];
-type DEFAULT_CURRENCY = any;
-const DEFAULT_CURRENCY: any = [];
-type ProfileRow = any;
-const ProfileRow: any = [];
 import { createClient } from "@/lib/supabase/client";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
-const CURRENCY_OPTIONS = [
-  { code: "USD", label: "US Dollar", symbol: "$" },
-  { code: "EUR", label: "Euro", symbol: "€" },
-  { code: "GBP", label: "British Pound", symbol: "£" },
-  { code: "JPY", label: "Japanese Yen", symbol: "¥" },
-  { code: "CAD", label: "Canadian Dollar", symbol: "CA$" },
-  { code: "AUD", label: "Australian Dollar", symbol: "A$" },
-  { code: "INR", label: "Indian Rupee", symbol: "₹" },
-  { code: "CHF", label: "Swiss Franc", symbol: "CHF" },
-];
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-interface StatCard {
-  label: string;
-  value: string;
-  icon: string;
-  color: string;
+const inputCls =
+  "w-full bg-[var(--background)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors duration-200 text-sm";
+
+const labelCls = "block text-sm font-medium text-[var(--foreground)] mb-1.5";
+
+type FeedbackState = { type: "success" | "error"; message: string } | null;
+
+// ─── Section Card ─────────────────────────────────────────────────────────────
+
+function SectionCard({
+  icon: Icon,
+  title,
+  description,
+  children,
+}: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-[0_1px_2px_rgba(0,0,0,0.08),0_8px_24px_-8px_rgba(0,0,0,0.24)] overflow-hidden">
+      <div className="px-6 py-5 border-b border-[var(--border)] flex items-center gap-3">
+        <div className="w-9 h-9 rounded-xl bg-[var(--primary)]/15 flex items-center justify-center flex-shrink-0">
+          <Icon className="w-4 h-4 text-[var(--primary)]" aria-hidden="true" />
+        </div>
+        <div>
+          <h2 className="text-base font-semibold text-[var(--foreground)] tracking-tight">{title}</h2>
+          <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{description}</p>
+        </div>
+      </div>
+      <div className="px-6 py-6">{children}</div>
+    </div>
+  );
 }
 
+// ─── Feedback Banner ──────────────────────────────────────────────────────────
+
+function FeedbackBanner({ feedback }: { feedback: FeedbackState }) {
+  if (!feedback) return null;
+  const isSuccess = feedback.type === "success";
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      className={`flex items-center gap-2.5 rounded-xl px-4 py-3 text-sm font-medium border mt-4 ${
+        isSuccess
+          ? "bg-emerald-950/60 border-emerald-700/40 text-emerald-300"
+          : "bg-red-950/60 border-red-700/40 text-red-300"
+      }`}
+    >
+      {isSuccess ? (
+        <Check className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+      ) : (
+        <AlertCircle className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+      )}
+      {feedback.message}
+    </motion.div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function ProfileAccountPage() {
+  const router = useRouter();
   const supabase = createClient();
 
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [email, setEmail] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [preferredCurrency, setPreferredCurrency] = useState(DEFAULT_CURRENCY);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
-  const [saveMessage, setSaveMessage] = useState("");
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [totalExpenses, setTotalExpenses] = useState(0);
-  const [expenseCount, setExpenseCount] = useState(0);
-  const [budgetCount, setBudgetCount] = useState(0);
-  const [topCategory, setTopCategory] = useState("N/A");
+  // Display name form
+  const [displayName, setDisplayName] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameFeedback, setNameFeedback] = useState<FeedbackState>(null);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Email form
+  const [newEmail, setNewEmail] = useState("");
+  const [emailSaving, setEmailSaving] = useState(false);
+  const [emailFeedback, setEmailFeedback] = useState<FeedbackState>(null);
 
+  // Password form
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordFeedback, setPasswordFeedback] = useState<FeedbackState>(null);
+
+  // ── Fetch user on mount ──────────────────────────────────────────────────────
   useEffect(() => {
-    async function loadProfile() {
-      setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+    let cancelled = false;
 
-      setEmail(user.email ?? "");
+    async function fetchUser() {
+      const { data, error } = await supabase.auth.getUser();
+      if (cancelled) return;
 
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", user.id)
-        .single();
-
-      if (profileData) {
-        setProfile(profileData as ProfileRow);
-        setFullName(profileData.full_name ?? "");
-        setPreferredCurrency(profileData.preferred_currency ?? DEFAULT_CURRENCY);
-        setAvatarUrl(profileData.avatar_url ?? null);
+      if (error || !data.user) {
+        router.replace("/login");
+        return;
       }
 
-      const { data: expenses } = await supabase
-        .from("expenses")
-        .select("amount, category_id")
-        .eq("user_id", user.id);
-
-      if (expenses && expenses.length > 0) {
-        const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount ?? "0"), 0);
-        setTotalExpenses(total);
-        setExpenseCount(expenses.length);
-
-        const catMap: Record<string, number> = {};
-        for (const e of expenses) {
-          catMap[e.category_id] = (catMap[e.category_id] ?? 0) + parseFloat(e.amount ?? "0");
-        }
-        const topCatId = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0]?.[0];
-        if (topCatId) {
-          const fallbackCat = EXPENSE_CATEGORIES.find((e) =>
-            (e as { name: string; icon: string; color: string }).name.toLowerCase().includes(topCatId.toLowerCase())
-          );
-          const { data: catRow } = await supabase
-            .from("categories")
-            .select("name")
-            .eq("id", topCatId)
-            .single();
-          if (catRow) setTopCategory(catRow.name);
-          else if (fallbackCat) setTopCategory((fallbackCat as { name: string; icon: string; color: string }).name);
-        }
-      }
-
-      const { data: budgets } = await supabase
-        .from("budgets")
-        .select("id")
-        .eq("user_id", user.id);
-
-      setBudgetCount(budgets?.length ?? 0);
+      setUser(data.user);
+      setDisplayName(data.user.user_metadata?.full_name ?? "");
+      setNewEmail(data.user.email ?? "");
       setLoading(false);
     }
 
-    loadProfile();
-  }, []);
+    fetchUser();
+    return () => { cancelled = true; };
+  }, [router, supabase.auth]);
 
-  async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const ext = file.name.split(".").pop();
-      const path = `${user.id}/avatar.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("avatars")
-        .upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(path);
-      const publicUrl = urlData.publicUrl;
-      await supabase.from("profiles").update({ avatar_url: publicUrl, updated_at: new Date().toISOString() }).eq("id", user.id);
-      setAvatarUrl(publicUrl);
-    } catch {
-      setSaveStatus("error");
-      setSaveMessage("Avatar upload failed. Please try again.");
-      setTimeout(() => setSaveStatus("idle"), 3000);
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  async function handleSave(e: React.FormEvent) {
+  // ── Update display name ──────────────────────────────────────────────────────
+  async function handleSaveName(e: React.FormEvent) {
     e.preventDefault();
-    setSaving(true);
-    setSaveStatus("idle");
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-      const { error } = await supabase.from("profiles").upsert({
-        id: user.id,
-        full_name: fullName.trim() || null,
-        preferred_currency: preferredCurrency,
-        updated_at: new Date().toISOString(),
-      });
-      if (error) throw error;
-      setSaveStatus("success");
-      setSaveMessage("Profile updated successfully.");
-    } catch {
-      setSaveStatus("error");
-      setSaveMessage("Failed to save profile. Please try again.");
-    } finally {
-      setSaving(false);
-      setTimeout(() => setSaveStatus("idle"), 3000);
+    if (!displayName.trim()) {
+      setNameFeedback({ type: "error", message: "Display name cannot be empty." });
+      return;
     }
+    setNameSaving(true);
+    setNameFeedback(null);
+
+    const { error } = await supabase.auth.updateUser({
+      data: { full_name: displayName.trim() },
+    });
+
+    if (error) {
+      setNameFeedback({ type: "error", message: error.message });
+    } else {
+      // Also update profiles table if it exists
+      if (user?.id) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: displayName.trim(), updated_at: new Date().toISOString() })
+          .eq("id", user.id);
+      }
+      setNameFeedback({ type: "success", message: "Display name updated successfully." });
+    }
+
+    setNameSaving(false);
+    setTimeout(() => setNameFeedback(null), 5000);
   }
 
-  const statCards: StatCard[] = [
-    { label: "Total Spent", value: `$${totalExpenses.toFixed(2)}`, icon: "💸", color: "var(--accent)" },
-    { label: "Expenses Logged", value: String(expenseCount), icon: "📋", color: "#6366F1" },
-    { label: "Active Budgets", value: String(budgetCount), icon: "🎯", color: "#10B981" },
-    { label: "Top Category", value: topCategory, icon: "🏆", color: "#F59E0B" },
-  ];
+  // ── Update email ─────────────────────────────────────────────────────────────
+  async function handleSaveEmail(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      setEmailFeedback({ type: "error", message: "Please enter a valid email address." });
+      return;
+    }
+    if (newEmail === user?.email) {
+      setEmailFeedback({ type: "error", message: "This is already your current email address." });
+      return;
+    }
+    setEmailSaving(true);
+    setEmailFeedback(null);
 
-  const initials = fullName
-    ? fullName.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
-    : email.slice(0, 2).toUpperCase();
+    const { error } = await supabase.auth.updateUser({ email: newEmail.trim() });
+
+    if (error) {
+      setEmailFeedback({ type: "error", message: error.message });
+    } else {
+      setEmailFeedback({
+        type: "success",
+        message: "Confirmation email sent. Check your inbox to verify the new address.",
+      });
+    }
+
+    setEmailSaving(false);
+    setTimeout(() => setEmailFeedback(null), 8000);
+  }
+
+  // ── Update password ──────────────────────────────────────────────────────────
+  async function handleSavePassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newPassword) {
+      setPasswordFeedback({ type: "error", message: "Please enter a new password." });
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordFeedback({ type: "error", message: "Password must be at least 8 characters." });
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordFeedback({ type: "error", message: "Passwords do not match." });
+      return;
+    }
+    setPasswordSaving(true);
+    setPasswordFeedback(null);
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+
+    if (error) {
+      setPasswordFeedback({ type: "error", message: error.message });
+    } else {
+      setPasswordFeedback({ type: "success", message: "Password updated successfully." });
+      setNewPassword("");
+      setConfirmPassword("");
+    }
+
+    setPasswordSaving(false);
+    setTimeout(() => setPasswordFeedback(null), 5000);
+  }
+
+  // ── Loading skeleton ─────────────────────────────────────────────────────────
+  if (loading) {
+    return (
+      <div className="min-h-screen mesh-bg flex items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+          <p className="text-sm text-[var(--muted-foreground)]">Loading account settings...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <main className="min-h-screen bg-[hsl(var(--background))] pb-24">
-      {/* Hero / Header */}
-      <Reveal>
-        <section className="relative overflow-hidden border-b border-[hsl(var(--border))] bg-[hsl(var(--card))]">
-          <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_50%_-20%,var(--accent)/8%,transparent)]" />
-          <div className="mx-auto max-w-4xl px-6 py-14">
-            <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-end sm:gap-8">
-              {/* Avatar */}
-              <div className="relative shrink-0">
-                <div className="h-24 w-24 rounded-full border-4 border-[var(--accent)]/30 bg-[hsl(var(--muted))] overflow-hidden shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
-                  {avatarUrl ? (
-                    <img
-                      src={avatarUrl}
-                      alt={fullName || "Avatar"}
-                      className="h-full w-full object-cover"
-                      onError={() => setAvatarUrl(null)}
-                    />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-[var(--accent)]">
-                      {loading ? "…" : initials}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploading}
-                  className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-white shadow-md transition-all duration-200 hover:scale-110 hover:brightness-110 disabled:opacity-60"
-                  aria-label="Upload avatar"
-                >
-                  {uploading ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Camera className="h-4 w-4" />
-                  )}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarUpload}
-                />
-              </div>
-
-              {/* Name + email */}
-              <div className="text-center sm:text-left">
-                <h1 className="text-2xl font-bold tracking-tight text-[hsl(var(--foreground))]">
-                  {loading ? "Loading…" : fullName || "Your Profile"}
-                </h1>
-                <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">{email}</p>
-                <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-3 py-0.5 text-xs font-medium text-[var(--accent)]">
-                  <Shield className="h-3 w-3" /> Verified Account
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-      </Reveal>
-
-      <div className="mx-auto max-w-4xl px-6 pt-10 space-y-10">
-        {/* Stat Cards */}
+    <div className="min-h-screen mesh-bg pt-24 pb-16 px-4">
+      <div className="max-w-2xl mx-auto">
+        {/* ── Page Header ── */}
         <Reveal>
           <motion.div
             variants={staggerContainer}
             initial="hidden"
             animate="visible"
-            className="grid grid-cols-2 gap-4 sm:grid-cols-4"
+            className="mb-8"
           >
-            {statCards.map((card, i) => (
-              <motion.div
-                key={card.label}
-                variants={fadeInUp}
-                whileHover={{ y: -3, transition: { duration: 0.2 } }}
-                className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_16px_-4px_rgba(0,0,0,0.08)]"
+            <motion.div variants={fadeInUp}>
+              <Link
+                href="/profile"
+                className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors duration-200 mb-6 group"
               >
-                <div className="text-2xl">{card.icon}</div>
-                <div
-                  className="mt-2 text-xl font-bold truncate"
-                  style={{ color: card.color }}
-                >
-                  {loading ? "—" : card.value}
-                </div>
-                <div className="mt-0.5 text-xs text-[hsl(var(--muted-foreground))]">{card.label}</div>
-              </motion.div>
-            ))}
+                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform duration-200" aria-hidden="true" />
+                Back to Profile
+              </Link>
+            </motion.div>
+
+            <motion.div variants={fadeInUp}>
+              <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">
+                Account Settings
+              </h1>
+              <p className="mt-2 text-[var(--muted-foreground)] text-sm">
+                Manage your display name, email address, and password.
+              </p>
+            </motion.div>
+
+            {/* Current account info pill */}
+            <motion.div
+              variants={fadeInUp}
+              className="mt-4 inline-flex items-center gap-2 rounded-full px-4 py-1.5 bg-[var(--primary)]/10 border border-[var(--primary)]/20 text-xs text-[var(--primary)] font-medium"
+            >
+              <div className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
+              Signed in as {user?.email}
+            </motion.div>
           </motion.div>
         </Reveal>
 
-        {/* Profile Form */}
-        <Reveal>
-          <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.10)] overflow-hidden">
-            <div className="border-b border-[hsl(var(--border))] px-6 py-4 flex items-center gap-3">
-              <User className="h-5 w-5 text-[var(--accent)]" />
-              <h2 className="text-base font-semibold text-[hsl(var(--foreground))]">Personal Information</h2>
-            </div>
-            <form onSubmit={handleSave} className="px-6 py-6 space-y-5">
-              {/* Full Name */}
-              <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1.5">
-                  Full Name
-                </label>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                  <input
-                    type="text"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Your full name"
-                    className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] py-2.5 pl-10 pr-4 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all duration-200"
-                  />
-                </div>
-              </div>
-
-              {/* Email (read-only) */}
-              <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1.5">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                  <input
-                    type="email"
-                    value={email}
-                    readOnly
-                    className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/50 py-2.5 pl-10 pr-4 text-sm text-[hsl(var(--muted-foreground))] cursor-not-allowed"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">Email cannot be changed here. Contact support if needed.</p>
-              </div>
-
-              {/* Preferred Currency */}
-              <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))] mb-1.5">
-                  Preferred Currency
-                </label>
-                <div className="relative">
-                  <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                  <select
-                    value={preferredCurrency}
-                    onChange={(e) => setPreferredCurrency(e.target.value)}
-                    className="w-full appearance-none rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] py-2.5 pl-10 pr-4 text-sm text-[hsl(var(--foreground))] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all duration-200"
-                  >
-                    {CURRENCY_OPTIONS.map((c) => (
-                      <option key={c.code} value={c.code}>
-                        {c.symbol} {c.label} ({c.code})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Save status */}
-              {saveStatus !== "idle" && (
-                <motion.div
-                  initial={{ opacity: 0, y: -8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium ${
-                    saveStatus === "success"
-                      ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                      : "bg-red-500/10 text-red-600 border border-red-500/20"
-                  }`}
-                >
-                  {saveStatus === "success" ? (
-                    <CheckCircle className="h-4 w-4 shrink-0" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 shrink-0" />
-                  )}
-                  {saveMessage}
-                </motion.div>
-              )}
-
-              <div className="pt-1">
-                <motion.button
-                  type="submit"
-                  disabled={saving || loading}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  className="flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-[0_2px_8px_var(--accent)/30] transition-all duration-200 hover:brightness-110 disabled:opacity-60 disabled:cursor-not-allowed"
-                >
-                  {saving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Save className="h-4 w-4" />
-                  )}
-                  {saving ? "Saving…" : "Save Changes"}
-                </motion.button>
-              </div>
-            </form>
-          </section>
-        </Reveal>
-
-        {/* Expense Categories Overview */}
-        <Reveal>
-          <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.10)] overflow-hidden">
-            <div className="border-b border-[hsl(var(--border))] px-6 py-4 flex items-center gap-3">
-              <Palette className="h-5 w-5 text-[var(--accent)]" />
-              <h2 className="text-base font-semibold text-[hsl(var(--foreground))]">Expense Categories</h2>
-            </div>
-            <div className="px-6 py-5">
-              <p className="text-sm text-[hsl(var(--muted-foreground))] mb-4">
-                These are the categories available for tracking your expenses across {BRAND.name}.
-              </p>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-                {EXPENSE_CATEGORIES.map((cat) => (
-                  <div
-                    key={cat.key}
-                    className="flex items-center gap-2.5 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-2.5"
-                  >
-                    <span className="text-lg">{cat.icon}</span>
-                    <span className="text-xs font-medium text-[hsl(var(--foreground))] truncate">{cat.name}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        </Reveal>
-
-        {/* Notifications Preferences (UI only) */}
-        <Reveal>
-          <section className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.10)] overflow-hidden">
-            <div className="border-b border-[hsl(var(--border))] px-6 py-4 flex items-center gap-3">
-              <Bell className="h-5 w-5 text-[var(--accent)]" />
-              <h2 className="text-base font-semibold text-[hsl(var(--foreground))]">Notification Preferences</h2>
-            </div>
-            <div className="px-6 py-5 space-y-4">
-              {[
-                { label: "Budget limit alerts", desc: "Get notified when you approach a category budget limit.", defaultOn: true },
-                { label: "Weekly spending summary", desc: "Receive a weekly digest of your spending habits.", defaultOn: true },
-                { label: "New expense reminders", desc: "Daily reminder to log your expenses.", defaultOn: false },
-              ].map((pref) => (
-                <NotificationToggle key={pref.label} label={pref.label} desc={pref.desc} defaultOn={pref.defaultOn} />
-              ))}
-            </div>
-          </section>
-        </Reveal>
-
-        {/* Danger Zone */}
-        <Reveal>
-          <section className="rounded-2xl border border-red-500/20 bg-red-500/5 overflow-hidden">
-            <div className="border-b border-red-500/20 px-6 py-4 flex items-center gap-3">
-              <AlertCircle className="h-5 w-5 text-red-500" />
-              <h2 className="text-base font-semibold text-red-600">Danger Zone</h2>
-            </div>
-            <div className="px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div>
-                <p className="text-sm font-medium text-[hsl(var(--foreground))]">Delete Account</p>
-                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
-                  Permanently remove your account and all associated data. This action cannot be undone.
-                </p>
-              </div>
-              <button
-                type="button"
-                className="shrink-0 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 transition-all duration-200 hover:bg-red-500 hover:text-white"
-                onClick={() => alert("Please contact support to delete your account.")}
+        {/* ── Forms ── */}
+        <motion.div
+          variants={staggerContainer}
+          initial="hidden"
+          animate="visible"
+          className="space-y-6"
+        >
+          {/* Display Name */}
+          <Reveal>
+            <motion.div variants={fadeInUp}>
+              <SectionCard
+                icon={User}
+                title="Display Name"
+                description="This name appears across your ExpenseIQ account."
               >
-                Delete Account
-              </button>
-            </div>
-          </section>
-        </Reveal>
-      </div>
-    </main>
-  );
-}
+                <form onSubmit={handleSaveName} noValidate>
+                  <div>
+                    <label htmlFor="display-name" className={labelCls}>
+                      Full Name
+                    </label>
+                    <div className="relative">
+                      <User
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground)] pointer-events-none"
+                        aria-hidden="true"
+                      />
+                      <input
+                        id="display-name"
+                        type="text"
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        placeholder="Your full name"
+                        className={`${inputCls} pl-10`}
+                        autoComplete="name"
+                        disabled={nameSaving}
+                      />
+                    </div>
+                  </div>
 
-function NotificationToggle({ label, desc, defaultOn }: { label: string; desc: string; defaultOn: boolean }) {
-  const [enabled, setEnabled] = useState(defaultOn);
-  return (
-    <div className="flex items-start justify-between gap-4">
-      <div>
-        <p className="text-sm font-medium text-[hsl(var(--foreground))]">{label}</p>
-        <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{desc}</p>
+                  <FeedbackBanner feedback={nameFeedback} />
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={nameSaving}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-[0_0_20px_rgba(99,102,241,0.35)] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
+                    >
+                      {nameSaving ? (
+                        <>
+                          <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" aria-hidden="true" />
+                          Save Name
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </SectionCard>
+            </motion.div>
+          </Reveal>
+
+          {/* Email */}
+          <Reveal>
+            <motion.div variants={fadeInUp}>
+              <SectionCard
+                icon={Mail}
+                title="Email Address"
+                description="Update the email address associated with your account. A confirmation link will be sent."
+              >
+                <form onSubmit={handleSaveEmail} noValidate>
+                  <div>
+                    <label htmlFor="new-email" className={labelCls}>
+                      New Email Address
+                    </label>
+                    <div className="relative">
+                      <Mail
+                        className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground)] pointer-events-none"
+                        aria-hidden="true"
+                      />
+                      <input
+                        id="new-email"
+                        type="email"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                        placeholder="you@example.com"
+                        className={`${inputCls} pl-10`}
+                        autoComplete="email"
+                        disabled={emailSaving}
+                      />
+                    </div>
+                  </div>
+
+                  <FeedbackBanner feedback={emailFeedback} />
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={emailSaving}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-[0_0_20px_rgba(99,102,241,0.35)] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
+                    >
+                      {emailSaving ? (
+                        <>
+                          <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" aria-hidden="true" />
+                          Update Email
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </SectionCard>
+            </motion.div>
+          </Reveal>
+
+          {/* Password */}
+          <Reveal>
+            <motion.div variants={fadeInUp}>
+              <SectionCard
+                icon={Lock}
+                title="Change Password"
+                description="Choose a strong password with at least 8 characters."
+              >
+                <form onSubmit={handleSavePassword} noValidate>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="new-password" className={labelCls}>
+                        New Password
+                      </label>
+                      <div className="relative">
+                        <Lock
+                          className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground)] pointer-events-none"
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="new-password"
+                          type="password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Min. 8 characters"
+                          className={`${inputCls} pl-10`}
+                          autoComplete="new-password"
+                          disabled={passwordSaving}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="confirm-password" className={labelCls}>
+                        Confirm New Password
+                      </label>
+                      <div className="relative">
+                        <Lock
+                          className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--muted-foreground)] pointer-events-none"
+                          aria-hidden="true"
+                        />
+                        <input
+                          id="confirm-password"
+                          type="password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          placeholder="Repeat new password"
+                          className={`${inputCls} pl-10`}
+                          autoComplete="new-password"
+                          disabled={passwordSaving}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Password strength indicator */}
+                  {newPassword.length > 0 && (
+                    <div className="mt-3">
+                      <div className="flex gap-1 mb-1">
+                        {[1, 2, 3, 4].map((level) => {
+                          const score = Math.min(
+                            4,
+                            [newPassword.length >= 8, /[A-Z]/.test(newPassword), /[0-9]/.test(newPassword), /[^A-Za-z0-9]/.test(newPassword)].filter(Boolean).length
+                          );
+                          const filled = level <= score;
+                          const color =
+                            score <= 1 ? "#EF4444" : score === 2 ? "#F59E0B" : score === 3 ? "#6366F1" : "#10B981";
+                          return (
+                            <div
+                              key={level}
+                              className="h-1 flex-1 rounded-full transition-all duration-300"
+                              style={{
+                                backgroundColor: filled ? color : "var(--border)",
+                              }}
+                            />
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-[var(--muted-foreground)]">
+                        {[newPassword.length >= 8, /[A-Z]/.test(newPassword), /[0-9]/.test(newPassword), /[^A-Za-z0-9]/.test(newPassword)].filter(Boolean).length <= 1
+                          ? "Weak"
+                          : [newPassword.length >= 8, /[A-Z]/.test(newPassword), /[0-9]/.test(newPassword), /[^A-Za-z0-9]/.test(newPassword)].filter(Boolean).length === 2
+                          ? "Fair"
+                          : [newPassword.length >= 8, /[A-Z]/.test(newPassword), /[0-9]/.test(newPassword), /[^A-Za-z0-9]/.test(newPassword)].filter(Boolean).length === 3
+                          ? "Good"
+                          : "Strong"}{" "}
+                        password
+                      </p>
+                    </div>
+                  )}
+
+                  <FeedbackBanner feedback={passwordFeedback} />
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      type="submit"
+                      disabled={passwordSaving}
+                      className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-[0_0_20px_rgba(99,102,241,0.35)] disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--card)]"
+                    >
+                      {passwordSaving ? (
+                        <>
+                          <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
+                          Saving...
+                        </>
+                      ) : (
+                        <>
+                          <Save className="w-4 h-4" aria-hidden="true" />
+                          Update Password
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </SectionCard>
+            </motion.div>
+          </Reveal>
+
+          {/* Danger zone */}
+          <Reveal>
+            <motion.div variants={fadeInUp}>
+              <div className="rounded-2xl border border-red-800/40 bg-red-950/20 p-6">
+                <h2 className="text-base font-semibold text-red-400 mb-1">Danger Zone</h2>
+                <p className="text-xs text-red-400/70 mb-4">
+                  Deleting your account is permanent and cannot be undone. All your data will be removed.
+                </p>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-xl border border-red-700/50 bg-red-950/40 px-4 py-2 text-sm font-medium text-red-400 transition-all duration-200 hover:bg-red-900/40 hover:border-red-600/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                  onClick={() => {
+                    // Placeholder — real deletion requires a server-side function
+                    window.alert("To delete your account, please contact support@expenseiq.app");
+                  }}
+                >
+                  <AlertCircle className="w-4 h-4" aria-hidden="true" />
+                  Delete Account
+                </button>
+              </div>
+            </motion.div>
+          </Reveal>
+        </motion.div>
       </div>
-      <button
-        type="button"
-        role="switch"
-        aria-checked={enabled}
-        onClick={() => setEnabled((v) => !v)}
-        className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${
-          enabled
-            ? "border-[var(--accent)] bg-[var(--accent)]"
-            : "border-[hsl(var(--border))] bg-[hsl(var(--muted))]"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-300 ${
-            enabled ? "translate-x-5" : "translate-x-0"
-          }`}
-        />
-      </button>
     </div>
   );
 }

@@ -1,401 +1,464 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Plus, Trash2, Save, AlertCircle, CheckCircle, Loader } from 'lucide-react';
 import { Reveal } from "@/components/Reveal";
-import { EXPENSE_CATEGORIES } from "@/lib/data";
-type formatCurrency = any;
-const formatCurrency: any = [];
-type DEFAULT_CURRENCY = any;
-const DEFAULT_CURRENCY: any = [];
-type BudgetRow = any;
-const BudgetRow: any = [];
-type CategoryRow = any;
-const CategoryRow: any = [];
-import { createClient } from "@/lib/supabase/client";
 import { fadeInUp, staggerContainer } from "@/lib/motion";
+import { EXPENSE_CATEGORIES, CURRENCIES } from "@/lib/data";
+import { createClient } from "@/lib/supabase/client";
+import { Save, Settings, AlertCircle, Check } from 'lucide-react';
 
-interface BudgetWithCategory extends BudgetRow {
-  category: CategoryRow | null;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface LocalBudget {
+interface BudgetEntry {
   category_id: string;
   monthly_limit: string;
   currency: string;
-  existing_id?: string;
 }
 
+interface Toast {
+  message: string;
+  type: "success" | "error";
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatCurrency(amount: number, currency = "USD"): string {
+  try {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(amount ?? 0);
+  } catch {
+    return `$${(amount ?? 0).toFixed(0)}`;
+  }
+}
+
+function slugify(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function BudgetSettingsPage() {
-  const [categories, setCategories] = useState<CategoryRow[]>([]);
-  const [budgets, setBudgets] = useState<BudgetWithCategory[]>([]);
-  const [localBudgets, setLocalBudgets] = useState<LocalBudget[]>([]);
+  const [budgets, setBudgets] = useState<Record<string, BudgetEntry>>(() => {
+    const initial: Record<string, BudgetEntry> = {};
+    EXPENSE_CATEGORIES.forEach((cat) => {
+      const id = slugify(cat.name);
+      initial[id] = { category_id: id, monthly_limit: "", currency: "USD" };
+    });
+    return initial;
+  });
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<{ type: "success" | "error"; message: string } | null>(null);
-  const [totalMonthly, setTotalMonthly] = useState(0);
+  const [toast, setToast] = useState<Toast | null>(null);
+  const [userId, setUserId] = useState<string | null>(null);
 
-  const supabase = createClient();
+  // ── Show toast ──────────────────────────────────────────────────────────────
+  function showToast(message: string, type: "success" | "error") {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 4000);
+  }
 
-  const showToast = (type: "success" | "error", message: string) => {
-    setToast({ type, message });
-    setTimeout(() => setToast(null), 3500);
-  };
+  // ── Fetch existing budgets on mount ─────────────────────────────────────────
+  useEffect(() => {
+    async function fetchBudgets() {
+      setLoading(true);
+      try {
+        const supabase = createClient();
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError || !userData.user) {
+          setLoading(false);
+          return;
+        }
+        setUserId(userData.user.id);
 
-      const [{ data: cats }, { data: buds }] = await Promise.all([
-        supabase.from("categories").select("*").order("name"),
-        supabase.from("budgets").select("*, category:categories(*)"),
-      ]);
+        const { data, error } = await supabase
+          .from("budgets")
+          .select("category_id, monthly_limit, currency")
+          .eq("user_id", userData.user.id);
 
-      const catList = (cats ?? []) as CategoryRow[];
-      const budList = (buds ?? []) as BudgetWithCategory[];
+        if (error) {
+          console.error("Error fetching budgets:", error.message);
+          setLoading(false);
+          return;
+        }
 
-      setCategories(catList);
-      setBudgets(budList);
-
-      // Build local editable state: one row per category
-      const mapped: LocalBudget[] = catList.map((cat) => {
-        const existing = budList.find((b) => b.category_id === cat.id);
-        return {
-          category_id: cat.id,
-          monthly_limit: existing ? existing.monthly_limit : "",
-          currency: existing ? existing.currency : DEFAULT_CURRENCY,
-          existing_id: existing?.id,
-        };
-      });
-      setLocalBudgets(mapped);
-    } catch {
-      showToast("error", "Failed to load budget data.");
-    } finally {
-      setLoading(false);
+        if (data && data.length > 0) {
+          setBudgets((prev) => {
+            const updated = { ...prev };
+            data.forEach((row) => {
+              if (updated[row.category_id]) {
+                updated[row.category_id] = {
+                  category_id: row.category_id,
+                  monthly_limit: row.monthly_limit?.toString() ?? "",
+                  currency: row.currency ?? "USD",
+                };
+              }
+            });
+            return updated;
+          });
+        }
+      } catch (err) {
+        console.error("Unexpected error fetching budgets:", err);
+      } finally {
+        setLoading(false);
+      }
     }
-  }, [supabase]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchBudgets();
+  }, []);
 
-  useEffect(() => {
-    const total = localBudgets.reduce((sum, b) => {
-      const val = parseFloat(b.monthly_limit);
-      return sum + (isNaN(val) ? 0 : val);
-    }, 0);
-    setTotalMonthly(total);
-  }, [localBudgets]);
+  // ── Handle field change ─────────────────────────────────────────────────────
+  function handleLimitChange(categoryId: string, value: string) {
+    setBudgets((prev) => ({
+      ...prev,
+      [categoryId]: { ...prev[categoryId], monthly_limit: value },
+    }));
+  }
 
-  const updateLimit = (category_id: string, value: string) => {
-    setLocalBudgets((prev) =>
-      prev.map((b) => (b.category_id === category_id ? { ...b, monthly_limit: value } : b))
-    );
-  };
+  function handleCurrencyChange(categoryId: string, value: string) {
+    setBudgets((prev) => ({
+      ...prev,
+      [categoryId]: { ...prev[categoryId], currency: value },
+    }));
+  }
 
-  const clearLimit = (category_id: string) => {
-    setLocalBudgets((prev) =>
-      prev.map((b) => (b.category_id === category_id ? { ...b, monthly_limit: "" } : b))
-    );
-  };
+  // ── Save all budgets ────────────────────────────────────────────────────────
+  async function handleSave() {
+    if (!userId) {
+      showToast("You must be signed in to save budgets.", "error");
+      return;
+    }
 
-  const handleSave = async () => {
     setSaving(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
+      const supabase = createClient();
 
-      const upserts = localBudgets
-        .filter((b) => b.monthly_limit !== "" && parseFloat(b.monthly_limit) > 0)
+      const rows = Object.values(budgets)
+        .filter((b) => b.monthly_limit !== "" && !isNaN(parseFloat(b.monthly_limit)))
         .map((b) => ({
-          ...(b.existing_id ? { id: b.existing_id } : {}),
-          user_id: user.id,
+          user_id: userId,
           category_id: b.category_id,
           monthly_limit: parseFloat(b.monthly_limit),
           currency: b.currency,
           updated_at: new Date().toISOString(),
         }));
 
-      const deletes = localBudgets
-        .filter((b) => (b.monthly_limit === "" || parseFloat(b.monthly_limit) <= 0) && b.existing_id)
-        .map((b) => b.existing_id as string);
-
-      const ops: Promise<unknown>[] = [];
-
-      if (upserts.length > 0) {
-        ops.push(
-          supabase.from("budgets").upsert(upserts, { onConflict: "id" }).then() as Promise<unknown>
-        );
+      if (rows.length === 0) {
+        showToast("Enter at least one budget limit before saving.", "error");
+        setSaving(false);
+        return;
       }
 
-      if (deletes.length > 0) {
-        ops.push(
-          supabase.from("budgets").delete().in("id", deletes).then() as Promise<unknown>
-        );
-      }
+      const { error } = await supabase
+        .from("budgets")
+        .upsert(rows, { onConflict: "user_id,category_id" });
 
-      await Promise.all(ops);
-      showToast("success", "Budget limits saved successfully.");
-      await fetchData();
-    } catch {
-      showToast("error", "Failed to save budgets. Please try again.");
+      if (error) {
+        showToast(error.message || "Failed to save budgets.", "error");
+      } else {
+        showToast("Budget limits saved successfully!", "success");
+      }
+    } catch (err) {
+      showToast("An unexpected error occurred. Please try again.", "error");
     } finally {
       setSaving(false);
     }
-  };
+  }
 
-  const getCategoryMeta = (categoryId: string) => {
-    const cat = categories.find((c) => c.id === categoryId);
-    const fallback = EXPENSE_CATEGORIES.find((e) =>
-      cat?.name?.toLowerCase().includes(e.name.toLowerCase().split(" ")[0])
-    );
-    return {
-      icon: cat?.icon ?? fallback?.icon ?? "📦",
-      color: cat?.color ?? fallback?.color ?? "#94A3B8",
-      name: cat?.name ?? "Unknown",
-    };
-  };
-
-  const setBudgetForCategory = budgets.reduce<Record<string, BudgetWithCategory>>((acc, b) => {
-    acc[b.category_id] = b;
-    return acc;
-  }, {});
-
-  const activeBudgetCount = localBudgets.filter(
-    (b) => b.monthly_limit !== "" && parseFloat(b.monthly_limit) > 0
-  ).length;
-
+  // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))] pb-24">
+    <main
+      className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8 mesh-bg"
+      style={{ background: "var(--background)" }}
+    >
       {/* Toast */}
       {toast && (
         <motion.div
-          initial={{ opacity: 0, y: -16 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -16 }}
-          className={`fixed top-6 right-6 z-50 flex items-center gap-3 rounded-xl px-5 py-3 shadow-lg text-sm font-medium ${
-            toast.type === "success"
-              ? "bg-emerald-500 text-white"
-              : "bg-red-500 text-white"
+          initial={{ opacity: 0, y: -20, x: "-50%" }}
+          animate={{ opacity: 1, y: 0, x: "-50%" }}
+          exit={{ opacity: 0, y: -20, x: "-50%" }}
+          className={`fixed top-6 left-1/2 z-50 flex items-center gap-2.5 px-5 py-3 rounded-xl text-sm font-medium shadow-lg border ${
+            toast.type === "error"
+              ? "bg-red-950/90 border-red-800/60 text-red-200"
+              : "bg-emerald-950/90 border-emerald-800/60 text-emerald-200"
           }`}
         >
-          {toast.type === "success" ? (
-            <CheckCircle className="h-4 w-4 shrink-0" />
+          {toast.type === "error" ? (
+            <AlertCircle className="w-4 h-4 shrink-0" />
           ) : (
-            <AlertCircle className="h-4 w-4 shrink-0" />
+            <Check className="w-4 h-4 shrink-0" />
           )}
           {toast.message}
         </motion.div>
       )}
 
-      <div className="mx-auto max-w-3xl px-4 pt-10 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
         {/* Header */}
         <Reveal>
           <div className="mb-10">
-            <h1 className="text-3xl font-bold tracking-tight text-[hsl(var(--foreground))]">
-              Budget Settings
-            </h1>
-            <p className="mt-2 text-[hsl(var(--muted-foreground))]">
-              Set monthly spending limits per category. Leave a field blank to remove that budget.
-            </p>
-          </div>
-        </Reveal>
-
-        {/* Summary Cards */}
-        <Reveal delay={0.05}>
-          <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.08)]">
-              <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                Total Monthly Budget
-              </p>
-              <p className="mt-2 text-2xl font-bold text-[var(--accent)]">
-                {formatCurrency(totalMonthly)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.08)]">
-              <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                Active Budgets
-              </p>
-              <p className="mt-2 text-2xl font-bold text-[hsl(var(--foreground))]">
-                {activeBudgetCount}
-              </p>
-            </div>
-            <div className="col-span-2 sm:col-span-1 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.08)]">
-              <p className="text-xs font-medium uppercase tracking-wide text-[hsl(var(--muted-foreground))]">
-                Categories Available
-              </p>
-              <p className="mt-2 text-2xl font-bold text-[hsl(var(--foreground))]">
-                {categories.length}
-              </p>
-            </div>
-          </div>
-        </Reveal>
-
-        {/* Budget Form */}
-        {loading ? (
-          <Reveal>
-            <div className="flex flex-col items-center justify-center py-24 gap-4">
-              <Loader className="h-8 w-8 animate-spin text-[var(--accent)]" />
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">Loading your budgets…</p>
-            </div>
-          </Reveal>
-        ) : (
-          <Reveal delay={0.1}>
-            <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.10)] overflow-hidden">
-              <div className="border-b border-[hsl(var(--border))] px-6 py-4">
-                <h2 className="text-base font-semibold text-[hsl(var(--foreground))]">
-                  Monthly Limits by Category
-                </h2>
-                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
-                  Enter a limit in {DEFAULT_CURRENCY} for each category you want to track.
-                </p>
-              </div>
-
-              <motion.ul
-                variants={staggerContainer}
-                initial="hidden"
-                animate="visible"
-                className="divide-y divide-[hsl(var(--border))]"
+            <div className="flex items-center gap-3 mb-2">
+              <div
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{
+                  background: "rgba(99,102,241,0.15)",
+                  border: "1px solid rgba(99,102,241,0.3)",
+                }}
               >
-                {localBudgets.map((budget, i) => {
-                  const meta = getCategoryMeta(budget.category_id);
-                  const existing = setBudgetForCategory[budget.category_id];
-                  const hasValue = budget.monthly_limit !== "" && parseFloat(budget.monthly_limit) > 0;
-                  const isNew = hasValue && !existing;
-                  const isModified =
-                    hasValue && existing && existing.monthly_limit !== budget.monthly_limit;
-                  const isCleared = !hasValue && !!existing;
-
-                  return (
-                    <motion.li
-                      key={budget.category_id}
-                      variants={fadeInUp}
-                      className="flex items-center gap-4 px-6 py-4 hover:bg-[hsl(var(--muted))]/30 transition-colors duration-150"
-                    >
-                      {/* Icon */}
-                      <div
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-lg"
-                        style={{ backgroundColor: meta.color + "22" }}
-                      >
-                        {meta.icon}
-                      </div>
-
-                      {/* Name + status */}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[hsl(var(--foreground))] truncate">
-                          {meta.name}
-                        </p>
-                        <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                          {isNew && (
-                            <span className="text-emerald-500 font-medium">New budget</span>
-                          )}
-                          {isModified && (
-                            <span className="text-amber-500 font-medium">Modified</span>
-                          )}
-                          {isCleared && (
-                            <span className="text-red-400 font-medium">Will be removed</span>
-                          )}
-                          {!isNew && !isModified && !isCleared && existing && (
-                            <span>Current: {formatCurrency(existing.monthly_limit)}</span>
-                          )}
-                          {!isNew && !isModified && !isCleared && !existing && (
-                            <span>No limit set</span>
-                          )}
-                        </p>
-                      </div>
-
-                      {/* Input */}
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[hsl(var(--muted-foreground))]">
-                            $
-                          </span>
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0.00"
-                            value={budget.monthly_limit}
-                            onChange={(e) => updateLimit(budget.category_id, e.target.value)}
-                            className="w-28 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-7 pr-3 py-2 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 focus:border-[var(--accent)] transition-all duration-200"
-                          />
-                        </div>
-                        {hasValue && (
-                          <motion.button
-                            whileHover={{ scale: 1.1 }}
-                            whileTap={{ scale: 0.95 }}
-                            onClick={() => clearLimit(budget.category_id)}
-                            className="flex h-8 w-8 items-center justify-center rounded-lg text-[hsl(var(--muted-foreground))] hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors duration-150"
-                            title="Clear limit"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </motion.button>
-                        )}
-                      </div>
-                    </motion.li>
-                  );
-                })}
-              </motion.ul>
-
-              {localBudgets.length === 0 && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <div className="text-4xl">📊</div>
-                  <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                    No categories found. Add categories first.
-                  </p>
-                </div>
-              )}
-            </div>
-          </Reveal>
-        )}
-
-        {/* Tips */}
-        <Reveal delay={0.15}>
-          <div className="mt-6 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]/60 p-5">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[var(--accent)]/15 text-[var(--accent)]">
-                <AlertCircle className="h-3.5 w-3.5" />
+                <Settings className="w-5 h-5" style={{ color: "var(--primary)" }} />
               </div>
               <div>
-                <p className="text-sm font-medium text-[hsl(var(--foreground))]">Budget tips</p>
-                <ul className="mt-1.5 space-y-1 text-xs text-[hsl(var(--muted-foreground))]">
-                  <li>Budgets reset at the start of each calendar month.</li>
-                  <li>You will see a warning on the dashboard when you reach 80% of a limit.</li>
-                  <li>Leave a field blank or set it to zero to remove that category budget.</li>
-                </ul>
+                <h1
+                  className="text-2xl font-bold tracking-tight"
+                  style={{ color: "var(--foreground)" }}
+                >
+                  Budget Settings
+                </h1>
+                <p className="text-sm" style={{ color: "var(--muted-foreground)" }}>
+                  Set monthly spending limits for each category.
+                </p>
               </div>
             </div>
           </div>
         </Reveal>
 
-        {/* Save Button */}
+        {/* Loading skeleton */}
+        {loading ? (
+          <div className="space-y-4">
+            {EXPENSE_CATEGORIES.map((cat) => (
+              <div
+                key={cat.name}
+                className="h-24 rounded-2xl animate-pulse"
+                style={{ background: "var(--card)", border: "1px solid var(--border)" }}
+              />
+            ))}
+          </div>
+        ) : (
+          <motion.div
+            variants={staggerContainer}
+            initial="hidden"
+            animate="visible"
+            className="space-y-4"
+          >
+            {EXPENSE_CATEGORIES.map((cat) => {
+              const id = slugify(cat.name);
+              const entry = budgets[id];
+              const limitNum = parseFloat(entry?.monthly_limit || "0");
+              const hasLimit = entry?.monthly_limit !== "" && !isNaN(limitNum) && limitNum > 0;
+
+              return (
+                <motion.div
+                  key={id}
+                  variants={fadeInUp}
+                  className="rounded-2xl p-5 transition-all duration-200"
+                  style={{
+                    background: "var(--card)",
+                    border: "1px solid var(--border)",
+                    boxShadow:
+                      "0 1px 2px rgba(0,0,0,0.08), 0 8px 24px -8px rgba(0,0,0,0.2)",
+                  }}
+                >
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                    {/* Category info */}
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div
+                        className="w-10 h-10 rounded-xl flex items-center justify-center text-lg shrink-0"
+                        style={{
+                          background: cat.color + "22",
+                          border: `1px solid ${cat.color}44`,
+                        }}
+                      >
+                        {cat.icon}
+                      </div>
+                      <div className="min-w-0">
+                        <p
+                          className="font-semibold text-sm"
+                          style={{ color: "var(--foreground)" }}
+                        >
+                          {cat.name}
+                        </p>
+                        {hasLimit ? (
+                          <p className="text-xs" style={{ color: cat.color }}>
+                            Limit: {formatCurrency(limitNum, entry?.currency ?? "USD")}
+                          </p>
+                        ) : (
+                          <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                            No limit set
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Inputs */}
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {/* Currency selector */}
+                      <div className="relative">
+                        <select
+                          value={entry?.currency ?? "USD"}
+                          onChange={(e) => handleCurrencyChange(id, e.target.value)}
+                          className="appearance-none rounded-xl px-3 py-2.5 text-sm font-medium pr-8 focus:outline-none focus:ring-1 transition-colors duration-200"
+                          style={{
+                            background: "rgba(255,255,255,0.04)",
+                            border: "1px solid var(--border)",
+                            color: "var(--foreground)",
+                          }}
+                          aria-label={`Currency for ${cat.name}`}
+                        >
+                          {CURRENCIES.map((c) => (
+                            <option
+                              key={c.code}
+                              value={c.code}
+                              style={{ background: "#1A1A2E" }}
+                            >
+                              {c.code} {c.symbol}
+                            </option>
+                          ))}
+                        </select>
+                        <div
+                          className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-xs"
+                          style={{ color: "var(--muted-foreground)" }}
+                        >
+                          ▾
+                        </div>
+                      </div>
+
+                      {/* Monthly limit input */}
+                      <div className="relative">
+                        <span
+                          className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium"
+                          style={{ color: "var(--muted-foreground)" }}
+                        >
+                          {
+                            CURRENCIES.find((c) => c.code === (entry?.currency ?? "USD"))
+                              ?.symbol ?? "$"
+                          }
+                        </span>
+                        <input
+                          type="number"
+                          min="0"
+                          step="1"
+                          placeholder="0"
+                          value={entry?.monthly_limit ?? ""}
+                          onChange={(e) => handleLimitChange(id, e.target.value)}
+                          className="w-36 rounded-xl pl-7 pr-4 py-2.5 text-sm focus:outline-none focus:ring-1 transition-colors duration-200"
+                          style={{
+                            background: "rgba(255,255,255,0.04)",
+                            border: `1px solid ${
+                              hasLimit ? "var(--primary)" : "var(--border)"
+                            }`,
+                            color: "var(--foreground)",
+                            // @ts-expect-error -- ring color via CSS var
+                            "--tw-ring-color": "var(--primary)",
+                          }}
+                          aria-label={`Monthly limit for ${cat.name}`}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress bar — shown when limit is set */}
+                  {hasLimit && (
+                    <div className="mt-4">
+                      <div
+                        className="h-1.5 rounded-full overflow-hidden"
+                        style={{ background: "rgba(255,255,255,0.06)" }}
+                      >
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: "0%",
+                            background: cat.color,
+                          }}
+                        />
+                      </div>
+                      <p
+                        className="text-xs mt-1"
+                        style={{ color: "var(--muted-foreground)" }}
+                      >
+                        Monthly limit: {formatCurrency(limitNum, entry?.currency ?? "USD")}
+                      </p>
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+          </motion.div>
+        )}
+
+        {/* Save button */}
         <Reveal delay={0.2}>
           <div className="mt-8 flex justify-end">
-            <motion.button
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
+            <button
               onClick={handleSave}
               disabled={saving || loading}
-              className="flex items-center gap-2 rounded-xl bg-[var(--accent)] px-7 py-3 text-sm font-semibold text-white shadow-[0_2px_8px_rgba(0,0,0,0.15)] hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+              className="inline-flex items-center gap-2.5 rounded-xl px-6 py-3 text-sm font-semibold transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{
+                background: saving ? "rgba(99,102,241,0.6)" : "var(--primary)",
+                color: "#fff",
+                boxShadow: saving
+                  ? "none"
+                  : "0 0 20px rgba(99,102,241,0.35), 0 4px 12px rgba(0,0,0,0.2)",
+              }}
             >
               {saving ? (
                 <>
-                  <Loader className="h-4 w-4 animate-spin" />
-                  Saving…
+                  <svg
+                    className="w-4 h-4 animate-spin"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    aria-hidden="true"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v8H4z"
+                    />
+                  </svg>
+                  Saving...
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4" />
-                  Save Budgets
+                  <Save className="w-4 h-4" />
+                  Save Budget Limits
                 </>
               )}
-            </motion.button>
+            </button>
+          </div>
+        </Reveal>
+
+        {/* Info note */}
+        <Reveal delay={0.3}>
+          <div
+            className="mt-6 flex items-start gap-3 rounded-xl p-4"
+            style={{
+              background: "rgba(99,102,241,0.08)",
+              border: "1px solid rgba(99,102,241,0.2)",
+            }}
+          >
+            <AlertCircle
+              className="w-4 h-4 mt-0.5 shrink-0"
+              style={{ color: "var(--primary)" }}
+            />
+            <p className="text-xs leading-relaxed" style={{ color: "var(--muted-foreground)" }}>
+              Budget limits are per calendar month. Leave a field empty to remove the limit for
+              that category. Changes take effect immediately after saving.
+            </p>
           </div>
         </Reveal>
       </div>
-    </div>
+    </main>
   );
 }

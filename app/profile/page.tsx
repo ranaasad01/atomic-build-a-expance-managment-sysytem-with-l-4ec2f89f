@@ -1,447 +1,261 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { User, Mail, DollarSign, Camera, Save, AlertCircle, CheckCircle, Loader2, Edit2 } from 'lucide-react';
+import { useRouter } from "next/navigation";
 import { Reveal } from "@/components/Reveal";
 import { fadeInUp, staggerContainer } from "@/lib/motion";
-import { BRAND } from "@/lib/data";
-type DEFAULT_CURRENCY = any;
-const DEFAULT_CURRENCY: any = [];
-type CURRENCY_SYMBOL = any;
-const CURRENCY_SYMBOL: any = [];
-type formatCurrency = any;
-const formatCurrency: any = [];
-type formatDate = any;
-const formatDate: any = [];
-type ProfileRow = any;
-const ProfileRow: any = [];
 import { createClient } from "@/lib/supabase/client";
+import { User, Mail, Calendar, LogOut, Settings, Shield } from 'lucide-react';
+import Link from "next/link";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
-const SUPPORTED_CURRENCIES = [
-  { code: "USD", symbol: "$", label: "US Dollar" },
-  { code: "EUR", symbol: "€", label: "Euro" },
-  { code: "GBP", symbol: "£", label: "British Pound" },
-  { code: "JPY", symbol: "¥", label: "Japanese Yen" },
-  { code: "CAD", symbol: "CA$", label: "Canadian Dollar" },
-  { code: "AUD", symbol: "A$", label: "Australian Dollar" },
-  { code: "INR", symbol: "₹", label: "Indian Rupee" },
-  { code: "CHF", symbol: "Fr", label: "Swiss Franc" },
-];
-
-interface ProfileForm {
-  full_name: string;
-  preferred_currency: string;
+function formatMemberSince(dateStr: string): string {
+  const date = new Date(dateStr);
+  return date.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
 
-interface Stats {
-  totalExpenses: number;
-  totalSpent: number;
-  avgMonthly: number;
-  categoriesUsed: number;
+function getInitials(email: string): string {
+  const parts = email.split("@")[0].split(/[._-]/);
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return email.slice(0, 2).toUpperCase();
 }
 
 export default function ProfilePage() {
-  const supabase = createClient();
-
-  const [profile, setProfile] = useState<ProfileRow | null>(null);
-  const [userEmail, setUserEmail] = useState<string>("");
-  const [form, setForm] = useState<ProfileForm>({ full_name: "", preferred_currency: DEFAULT_CURRENCY });
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [stats, setStats] = useState<Stats>({ totalExpenses: 0, totalSpent: 0, avgMonthly: 0, categoriesUsed: 0 });
+  const router = useRouter();
+  const [user, setUser] = useState<SupabaseUser | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const [saveStatus, setSaveStatus] = useState<"idle" | "success" | "error">("idle");
-  const [saveMessage, setSaveMessage] = useState("");
-  const [editingName, setEditingName] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
-    async function loadProfile() {
-      setLoading(true);
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        setUserEmail(user.email ?? "");
-
-        const { data: profileData } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", user.id)
-          .single();
-
-        if (profileData) {
-          setProfile(profileData as ProfileRow);
-          setForm({
-            full_name: profileData.full_name ?? "",
-            preferred_currency: profileData.preferred_currency ?? DEFAULT_CURRENCY,
-          });
-          if (profileData.avatar_url) {
-            const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(profileData.avatar_url);
-            setAvatarUrl(urlData.publicUrl);
-          }
-        }
-
-        const { data: expenses } = await supabase
-          .from("expenses")
-          .select("amount, currency, expense_date, category_id")
-          .eq("user_id", user.id);
-
-        if (expenses && expenses.length > 0) {
-          const total = expenses.reduce((sum, e) => sum + parseFloat(e.amount), 0);
-          const uniqueCategories = new Set(expenses.map((e) => e.category_id)).size;
-          const dates = expenses.map((e) => e.expense_date).sort();
-          const firstDate = new Date(dates[0]);
-          const lastDate = new Date(dates[dates.length - 1]);
-          const monthsDiff = Math.max(
-            1,
-            (lastDate.getFullYear() - firstDate.getFullYear()) * 12 +
-              (lastDate.getMonth() - firstDate.getMonth()) + 1
-          );
-          setStats({
-            totalExpenses: expenses.length,
-            totalSpent: total,
-            avgMonthly: total / monthsDiff,
-            categoriesUsed: uniqueCategories,
-          });
-        }
-      } finally {
-        setLoading(false);
+    const supabase = createClient();
+    supabase.auth.getUser().then(({ data }) => {
+      if (!data.user) {
+        router.replace("/login");
+      } else {
+        setUser(data.user);
       }
-    }
-    loadProfile();
-  }, []);
+      setLoading(false);
+    });
+  }, [router]);
 
-  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setAvatarFile(file);
-    const reader = new FileReader();
-    reader.onload = (ev) => setAvatarPreview(ev.target?.result as string);
-    reader.readAsDataURL(file);
-  }
-
-  async function uploadAvatar(userId: string): Promise<string | null> {
-    if (!avatarFile) return profile?.avatar_url ?? null;
-    setUploadingAvatar(true);
-    try {
-      const ext = avatarFile.name.split(".").pop();
-      const path = `${userId}/avatar.${ext}`;
-      const { error } = await supabase.storage.from("avatars").upload(path, avatarFile, { upsert: true });
-      if (error) throw error;
-      return path;
-    } finally {
-      setUploadingAvatar(false);
-    }
-  }
-
-  async function handleSave(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setSaveStatus("idle");
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const avatarPath = await uploadAvatar(user.id);
-
-      const updates = {
-        id: user.id,
-        full_name: form.full_name.trim() || null,
-        preferred_currency: form.preferred_currency,
-        avatar_url: avatarPath,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error } = await supabase.from("profiles").upsert(updates);
-      if (error) throw error;
-
-      if (avatarPath) {
-        const { data: urlData } = supabase.storage.from("avatars").getPublicUrl(avatarPath);
-        setAvatarUrl(urlData.publicUrl);
-      }
-      setAvatarFile(null);
-      setAvatarPreview(null);
-      setSaveStatus("success");
-      setSaveMessage("Profile updated successfully.");
-      setEditingName(false);
-    } catch (err: unknown) {
-      setSaveStatus("error");
-      setSaveMessage(err instanceof Error ? err.message : "Failed to save profile.");
-    } finally {
-      setSaving(false);
-      setTimeout(() => setSaveStatus("idle"), 4000);
-    }
-  }
-
-  async function handleSignOut() {
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    const supabase = createClient();
     await supabase.auth.signOut();
-    window.location.href = "/login";
-  }
-
-  const displayAvatar = avatarPreview ?? avatarUrl;
-  const initials = (form.full_name || userEmail || "U")
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+    router.replace("/login");
+  };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-[var(--accent)]" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--background)" }}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+          <p className="text-sm text-[var(--muted-foreground)]">Loading profile...</p>
+        </div>
       </div>
     );
   }
 
+  if (!user) return null;
+
+  const initials = getInitials(user.email ?? "U");
+  const memberSince = user.created_at ? formatMemberSince(user.created_at) : "Unknown";
+  const fullName = (user.user_metadata?.full_name as string | undefined) ?? "";
+
   return (
-    <main className="min-h-screen bg-[hsl(var(--background))] pb-24">
-      {/* Header */}
-      <Reveal>
-        <section className="border-b border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-10 md:py-14">
-          <div className="mx-auto max-w-3xl">
-            <h1 className="text-3xl font-bold tracking-tight text-[hsl(var(--foreground))] md:text-4xl">
-              Your Profile
-            </h1>
-            <p className="mt-2 text-[hsl(var(--muted-foreground))]">
-              Manage your account details, avatar, and preferences.
-            </p>
-          </div>
-        </section>
-      </Reveal>
-
-      <div className="mx-auto max-w-3xl px-4 pt-10 space-y-8">
-        {/* Avatar + Identity Card */}
-        <Reveal>
-          <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.10)]">
-            <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-start">
-              {/* Avatar */}
-              <div className="relative flex-shrink-0">
-                <div className="h-24 w-24 rounded-full overflow-hidden border-2 border-[var(--accent)]/30 shadow-md">
-                  {displayAvatar ? (
-                    <img
-                      src={displayAvatar}
-                      alt={form.full_name || "Avatar"}
-                      className="h-full w-full object-cover"
-                      onError={() => setAvatarUrl(null)}
-                    />
-                  ) : (
-                    <div className="h-full w-full flex items-center justify-center bg-[var(--accent)]/10 text-[var(--accent)] text-2xl font-bold">
-                      {initials}
-                    </div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute -bottom-1 -right-1 rounded-full bg-[var(--accent)] p-1.5 text-white shadow-md hover:opacity-90 transition-opacity"
-                  aria-label="Change avatar"
-                >
-                  <Camera className="h-3.5 w-3.5" />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleAvatarChange}
-                />
-              </div>
-
-              {/* Name + email */}
-              <div className="flex-1 text-center sm:text-left">
-                <div className="flex items-center justify-center sm:justify-start gap-2">
-                  {editingName ? (
-                    <input
-                      type="text"
-                      value={form.full_name}
-                      onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                      className="text-xl font-semibold bg-transparent border-b border-[var(--accent)] text-[hsl(var(--foreground))] outline-none pb-0.5 w-48"
-                      autoFocus
-                      onBlur={() => setEditingName(false)}
-                      onKeyDown={(e) => e.key === "Enter" && setEditingName(false)}
-                    />
-                  ) : (
-                    <span className="text-xl font-semibold text-[hsl(var(--foreground))]">
-                      {form.full_name || "Unnamed User"}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setEditingName(true)}
-                    className="text-[hsl(var(--muted-foreground))] hover:text-[var(--accent)] transition-colors"
-                    aria-label="Edit name"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </button>
-                </div>
-                <div className="mt-1 flex items-center justify-center sm:justify-start gap-1.5 text-sm text-[hsl(var(--muted-foreground))]">
-                  <Mail className="h-3.5 w-3.5" />
-                  <span>{userEmail}</span>
-                </div>
-                {avatarFile && (
-                  <p className="mt-2 text-xs text-[var(--accent)]">
-                    New avatar selected. Save to apply.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </Reveal>
-
-        {/* Stats Row */}
+    <main
+      className="min-h-screen mesh-bg py-24 px-4"
+      style={{ background: "var(--background)" }}
+    >
+      <div className="max-w-2xl mx-auto">
+        {/* Page header */}
         <Reveal>
           <motion.div
             variants={staggerContainer}
             initial="hidden"
             animate="visible"
-            className="grid grid-cols-2 gap-4 sm:grid-cols-4"
+            className="mb-10"
           >
-            {[
-              { label: "Total Expenses", value: stats.totalExpenses.toString(), icon: "📋" },
-              { label: "Total Spent", value: formatCurrency(stats.totalSpent, form.preferred_currency), icon: "💸" },
-              { label: "Avg. Monthly", value: formatCurrency(stats.avgMonthly, form.preferred_currency), icon: "📅" },
-              { label: "Categories Used", value: stats.categoriesUsed.toString(), icon: "🏷️" },
-            ].map((stat, i) => (
-              <motion.div
-                key={stat.label}
-                variants={fadeInUp}
-                className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_12px_-4px_rgba(0,0,0,0.08)]"
-              >
-                <div className="text-2xl mb-1">{stat.icon}</div>
-                <div className="text-lg font-bold text-[hsl(var(--foreground))] leading-tight">{stat.value}</div>
-                <div className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{stat.label}</div>
-              </motion.div>
-            ))}
+            <motion.h1
+              variants={fadeInUp}
+              className="text-3xl font-bold tracking-tight text-[var(--foreground)]"
+            >
+              Profile
+            </motion.h1>
+            <motion.p
+              variants={fadeInUp}
+              className="mt-1 text-sm text-[var(--muted-foreground)]"
+            >
+              Manage your account and preferences.
+            </motion.p>
           </motion.div>
         </Reveal>
 
-        {/* Profile Settings Form */}
-        <Reveal>
-          <form
-            onSubmit={handleSave}
-            className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.10)] space-y-6"
+        {/* Avatar + identity card */}
+        <Reveal delay={0.05}>
+          <div
+            className="glass rounded-2xl border border-[var(--border)] p-8 mb-6 flex flex-col sm:flex-row items-center sm:items-start gap-6"
           >
-            <div>
-              <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Account Settings</h2>
-              <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">Update your display name and currency preference.</p>
-            </div>
-
-            {/* Full Name */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[hsl(var(--foreground))]" htmlFor="full_name">
-                Display Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                <input
-                  id="full_name"
-                  type="text"
-                  value={form.full_name}
-                  onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
-                  placeholder="Your full name"
-                  className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-10 pr-4 py-2.5 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 transition"
-                />
-              </div>
-            </div>
-
-            {/* Email (read-only) */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[hsl(var(--foreground))]" htmlFor="email">
-                Email Address
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                <input
-                  id="email"
-                  type="email"
-                  value={userEmail}
-                  readOnly
-                  className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--muted))]/30 pl-10 pr-4 py-2.5 text-sm text-[hsl(var(--muted-foreground))] cursor-not-allowed"
-                />
-              </div>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Email cannot be changed here.</p>
-            </div>
-
-            {/* Preferred Currency */}
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-[hsl(var(--foreground))]" htmlFor="currency">
-                Preferred Currency
-              </label>
-              <div className="relative">
-                <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[hsl(var(--muted-foreground))]" />
-                <select
-                  id="currency"
-                  value={form.preferred_currency}
-                  onChange={(e) => setForm((f) => ({ ...f, preferred_currency: e.target.value }))}
-                  className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-10 pr-4 py-2.5 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/40 transition appearance-none"
-                >
-                  {SUPPORTED_CURRENCIES.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.symbol} — {c.label} ({c.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Save Status */}
-            {saveStatus !== "idle" && (
-              <motion.div
-                initial={{ opacity: 0, y: -8 }}
-                animate={{ opacity: 1, y: 0 }}
-                className={`flex items-center gap-2 rounded-xl px-4 py-3 text-sm font-medium ${
-                  saveStatus === "success"
-                    ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                    : "bg-red-500/10 text-red-600 border border-red-500/20"
-                }`}
-              >
-                {saveStatus === "success" ? (
-                  <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                ) : (
-                  <AlertCircle className="h-4 w-4 flex-shrink-0" />
-                )}
-                {saveMessage}
-              </motion.div>
-            )}
-
-            {/* Submit */}
-            <button
-              type="submit"
-              disabled={saving || uploadingAvatar}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--accent)] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+            {/* Avatar circle */}
+            <div
+              className="flex-shrink-0 w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white shadow-[0_0_24px_rgba(99,102,241,0.35)]"
+              style={{ background: "linear-gradient(135deg, var(--primary) 0%, #8B5CF6 100%)" }}
+              aria-label={`Avatar for ${user.email}`}
             >
-              {saving || uploadingAvatar ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
-              {saving ? "Saving..." : uploadingAvatar ? "Uploading avatar..." : "Save Changes"}
-            </button>
-          </form>
-        </Reveal>
+              {initials}
+            </div>
 
-        {/* Danger Zone */}
-        <Reveal>
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/5 p-6 space-y-4">
-            <div>
-              <h2 className="text-lg font-semibold text-red-600">Danger Zone</h2>
-              <p className="text-sm text-[hsl(var(--muted-foreground))] mt-0.5">
-                Actions here are permanent or require re-authentication.
+            {/* Identity */}
+            <div className="flex-1 text-center sm:text-left">
+              {fullName && (
+                <h2 className="text-xl font-semibold text-[var(--foreground)] mb-1">
+                  {fullName}
+                </h2>
+              )}
+              <p className="text-[var(--muted-foreground)] text-sm flex items-center justify-center sm:justify-start gap-1.5">
+                <Mail className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                {user.email}
+              </p>
+              <p className="mt-1.5 text-[var(--muted-foreground)] text-sm flex items-center justify-center sm:justify-start gap-1.5">
+                <Calendar className="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true" />
+                Member since {memberSince}
               </p>
             </div>
-            <button
-              type="button"
+          </div>
+        </Reveal>
+
+        {/* Account info card */}
+        <Reveal delay={0.1}>
+          <div className="glass rounded-2xl border border-[var(--border)] p-6 mb-6">
+            <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
+              <User className="w-4 h-4 text-[var(--primary)]" aria-hidden="true" />
+              Account Information
+            </h3>
+            <dl className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+                <dt className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide w-28 flex-shrink-0">
+                  Email
+                </dt>
+                <dd className="text-sm text-[var(--foreground)] font-mono bg-[var(--background)]/60 rounded-lg px-3 py-1.5 border border-[var(--border)] break-all">
+                  {user.email}
+                </dd>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+                <dt className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide w-28 flex-shrink-0">
+                  User ID
+                </dt>
+                <dd className="text-xs text-[var(--muted-foreground)] font-mono bg-[var(--background)]/60 rounded-lg px-3 py-1.5 border border-[var(--border)] break-all">
+                  {user.id}
+                </dd>
+              </div>
+              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-4">
+                <dt className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide w-28 flex-shrink-0">
+                  Status
+                </dt>
+                <dd>
+                  <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                    Active
+                  </span>
+                </dd>
+              </div>
+            </dl>
+          </div>
+        </Reveal>
+
+        {/* Quick links */}
+        <Reveal delay={0.15}>
+          <div className="glass rounded-2xl border border-[var(--border)] p-6 mb-6">
+            <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
+              <Settings className="w-4 h-4 text-[var(--primary)]" aria-hidden="true" />
+              Quick Links
+            </h3>
+            <div className="space-y-2">
+              <Link
+                href="/profile-account"
+                className="flex items-center justify-between w-full rounded-xl px-4 py-3 border border-[var(--border)] bg-[var(--background)]/40 hover:border-[var(--primary)]/50 hover:bg-[var(--primary)]/5 transition-all duration-200 group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--primary)]/10 flex items-center justify-center">
+                    <Settings className="w-4 h-4 text-[var(--primary)]" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[var(--foreground)]">Account Settings</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">Update name, email, and password</p>
+                  </div>
+                </div>
+                <svg
+                  className="w-4 h-4 text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors duration-200"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+
+              <Link
+                href="/budget-settings"
+                className="flex items-center justify-between w-full rounded-xl px-4 py-3 border border-[var(--border)] bg-[var(--background)]/40 hover:border-[var(--accent)]/50 hover:bg-[var(--accent)]/5 transition-all duration-200 group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-[var(--accent)]/10 flex items-center justify-center">
+                    <Shield className="w-4 h-4 text-[var(--accent)]" aria-hidden="true" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-[var(--foreground)]">Budget Settings</p>
+                    <p className="text-xs text-[var(--muted-foreground)]">Set monthly limits per category</p>
+                  </div>
+                </div>
+                <svg
+                  className="w-4 h-4 text-[var(--muted-foreground)] group-hover:text-[var(--accent)] transition-colors duration-200"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                </svg>
+              </Link>
+            </div>
+          </div>
+        </Reveal>
+
+        {/* Sign out */}
+        <Reveal delay={0.2}>
+          <div className="glass rounded-2xl border border-[var(--border)] p-6">
+            <h3 className="text-sm font-semibold text-[var(--foreground)] mb-4 flex items-center gap-2">
+              <LogOut className="w-4 h-4 text-[var(--destructive)]" aria-hidden="true" />
+              Session
+            </h3>
+            <p className="text-sm text-[var(--muted-foreground)] mb-4">
+              You are currently signed in as <span className="text-[var(--foreground)] font-medium">{user.email}</span>. Signing out will end your session on this device.
+            </p>
+            <motion.button
               onClick={handleSignOut}
-              className="rounded-xl border border-red-500/30 bg-white/5 px-5 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-500/10 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500"
+              disabled={signingOut}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold border border-[var(--destructive)]/40 text-[var(--destructive)] bg-[var(--destructive)]/5 hover:bg-[var(--destructive)]/15 hover:border-[var(--destructive)]/60 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Sign Out
-            </button>
+              {signingOut ? (
+                <>
+                  <div className="w-4 h-4 rounded-full border-2 border-[var(--destructive)] border-t-transparent animate-spin" />
+                  Signing out...
+                </>
+              ) : (
+                <>
+                  <LogOut className="w-4 h-4" aria-hidden="true" />
+                  Sign Out
+                </>
+              )}
+            </motion.button>
           </div>
         </Reveal>
       </div>

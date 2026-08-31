@@ -3,251 +3,12 @@
     "dashboard": "Panel de control",
     "expenses": "Gastos",
     "budget": "Presupuesto",
+    "analytics": "Análisis",
+    "reports": "Reportes",
+    "recurring": "Recurrentes",
     "profile": "Perfil",
     "signin": "Iniciar sesión",
     "signup": "Registrarse"
-  },
-  "footer": {
-    "product": "Producto",
-    "legal": "Legal",
-    "copyright": "© 2024 ExpenseIQ. Todos los derechos reservados.",
-    "tagline": "Creado para la claridad. Diseñado para el control.",
-    "privacy": "Política de privacidad",
-    "terms": "Términos de servicio",
-    "support": "Soporte"
-  },
-  "login": {
-    "heroHeading": "Tus finanzas, finalmente bajo control.",
-    "heroBody": "ExpenseIQ te ofrece una vista en tiempo real de cada dólar que gastas — por categoría, por mes, por hábito. Inicia sesión para continuar donde lo dejaste.",
-    "formHeading": "Bienvenido de vuelta",
-    "formBody": "Ingresa tu correo electrónico y contraseña para acceder a tu panel de control de ExpenseIQ.",
-    "formCta": "Iniciar sesión en ExpenseIQ",
-    "signupHeading": "¿Nuevo en ExpenseIQ?",
-    "signupBody": "Crea una cuenta gratuita en menos de un minuto — sin tarjeta de crédito requerida.",
-    "signupCta": "Crea tu cuenta gratuita",
-    "footerBody": "© 2024 ExpenseIQ. Todos los derechos reservados.",
-    "emailLabel": "Correo electrónico",
-    "emailPlaceholder": "tu@ejemplo.com",
-    "errorEmailNotConfirmed": "Por favor verifica tu correo electrónico antes de iniciar sesión.",
-    "errorGeneric": "Algo salió mal. Por favor intenta de nuevo.",
-    "errorInvalidCredentials": "Correo electrónico o contraseña inválidos.",
-    "feature1": "Rastrear gastos en tiempo real",
-    "feature2": "Categorizar gastos automáticamente",
-    "feature3": "Generar reportes detallados",
-    "forgotPassword": "¿Olvidaste tu contraseña?",
-    "heading": "Bienvenido de vuelta",
-    "heroBadge": "Seguro y rápido",
-    "hidePassword": "Ocultar",
-    "noAccount": "¿No tienes cuenta?",
-    "orDivider": "o",
-    "passwordLabel": "Contraseña",
-    "passwordPlaceholder": "••••••••",
-    "showPassword": "Mostrar",
-    "signUpLink": "Registrarse",
-    "signingIn": "Iniciando sesión...",
-    "subheading": "Gestiona tus gastos de forma más inteligente",
-    "submitButton": "Iniciar sesión",
-    "successMessage": "¡Bienvenido! Redirigiendo...",
-    "hero": [
-      "Track spending across 7 smart categories — Food, Transport, Bills, and more",
-      "Live budget alerts so you never blow past your monthly limit",
-      "Beautiful charts that turn raw numbers into clear financial insight"
-    ],
-    "form": [
-      "Email — your registered email address, e.g. alex@example.com",
-      "Password — at least 8 characters, case-sensitive",
-      "Forgot your password? — request a reset link sent to your inbox"
-    ],
-    "footerLinks": [
-      "Privacy Policy",
-      "Terms of Service",
-      "Support"
-    ]
-  },
-  "signup": {
-    "heroHeading": "Toma el control de cada dólar que gastas",
-    "heroBody": "ExpenseIQ te ofrece una vista inteligente y en tiempo real de tus finanzas — registra gastos por categoría, establece presupuestos mensuales y detecta gastos excesivos antes de que ocurran. Únete a miles de usuarios que finalmente saben dónde va su dinero.",
-    "formHeading": "Crea tu cuenta gratuita",
-    "formBody": "Regístrate en menos de 30 segundos — sin tarjeta de crédito requerida. Tu panel de finanzas personales estará listo en el momento en que confirmes tu correo electrónico.",
-    "formCta": "Crear cuenta",
-    "loginHeading": "¿Ya tienes una cuenta?",
-    "loginBody": "Bienvenido de vuelta — inicia sesión en tu panel de ExpenseIQ y continúa donde lo dejaste.",
-    "loginCta": "Inicia sesión en ExpenseIQ",
-    "footerBody": "© 2024 ExpenseIQ. Todos los derechos reservados.",
-    "hero": [
-      "Secured by Supabase Auth — your data stays yours",
-      "Live dashboard updates the moment you log an expense",
-      "Per-category budget limits with instant over-budget alerts",
-      "Works beautifully on mobile, tablet, and desktop"
-    ],
-    "form": [
-      "Full name — e.g. Alex Johnson",
-      "Email address — e.g. alex@example.com",
-      "Password — minimum 8 characters",
-      "Confirm password — must match above"
-    ],
-    "footerLinks": [
-      "Privacy Policy",
-      "Terms of Service",
-      "Support"
-    ]
-  },
-  "dashboard": {
-    "headerHeading": "Buenos días, Alex",
-    "headerBody": "Aquí hay un resumen de tus finanzas para noviembre de 2024. Tu gasto está en orden — has utilizado el 68% de tu presupuesto mensual en todas las categorías.",
-    "headerCta": "Agregar Gasto",
-    "summaryHeading": "Tu Mes de un Vistazo",
-    "summaryBody": "Cuatro métricas clave actualizadas en tiempo real mientras registras nuevos gastos. Los indicadores ámbar señalan categorías que se acercan a su límite de presupuesto.",
-    "chartsHeading": "Tendencias de Gasto y Desglose por Categoría",
-    "chartsBody": "El gráfico de barras rastrea tus patrones de gasto diarios y mensuales. El gráfico de dona muestra cómo se distribuye tu presupuesto entre categorías.",
-    "recentHeading": "Gastos Recientes",
-    "recentBody": "Tus 5 transacciones más recientes, actualizadas en vivo. Haz clic en cualquier fila para editar.",
-    "recentCta": "Ver Todos los Gastos",
-    "ctaHeading": "Mantente al Control de Cada Dólar",
-    "ctaBody": "Registra gastos conforme ocurren, establece presupuestos por categoría que se adapten a tu estilo de vida, y deja que ExpenseIQ identifique los patrones que importan — antes de que se conviertan en problemas.",
-    "ctaPrimary": "Agrega Tu Primer Gasto",
-    "ctaSecondary": "Gestionar Presupuestos",
-    "ctaTertiary": "Ver historial completo de gastos",
-    "header": [
-      "Breadcrumb: Home › Dashboard",
-      "Page subtitle: November 2024 — Monthly Overview",
-      "Quick action: + Add Expense → /expenses/add",
-      "Quick action: View All Expenses → /expenses"
-    ],
-    "summaryCards": [
-      {
-        "title": "Total Spent",
-        "value": "$2,184.50",
-        "detail": "spent across all categories this month",
-        "trend": "+12% vs last month",
-        "color": "primary"
-      },
-      {
-        "title": "Monthly Budget",
-        "value": "$3,200.00",
-        "detail": "your combined limit across all active categories",
-        "trend": "68% used",
-        "color": "accent"
-      },
-      {
-        "title": "Remaining Balance",
-        "value": "$1,015.50",
-        "detail": "available to spend before month end",
-        "trend": "On Track",
-        "color": "success"
-      },
-      {
-        "title": "Top Category",
-        "value": "Food & Dining",
-        "detail": "$640.00 spent — 32% of total spend",
-        "trend": "80% of category budget used",
-        "color": "accent"
-      }
-    ],
-    "recentExpenses": [
-      {
-        "title": "Grocery Run",
-        "category": "Food & Dining",
-        "amount": "$87.40",
-        "date": "Nov 14, 2024",
-        "badge": "Food"
-      },
-      {
-        "title": "Uber to Airport",
-        "category": "Transport",
-        "amount": "$34.20",
-        "date": "Nov 13, 2024",
-        "badge": "Transport"
-      },
-      {
-        "title": "Netflix Subscription",
-        "category": "Entertainment",
-        "amount": "$15.99",
-        "date": "Nov 12, 2024",
-        "badge": "Entertainment"
-      },
-      {
-        "title": "Electricity Bill",
-        "category": "Bills",
-        "amount": "$112.00",
-        "date": "Nov 11, 2024",
-        "badge": "Bills"
-      },
-      {
-        "title": "Pharmacy",
-        "category": "Health",
-        "amount": "$28.75",
-        "date": "Nov 10, 2024",
-        "badge": "Health"
-      }
-    ]
-  },
-  "expenses": {
-    "headerHeading": "Todos los Gastos",
-    "headerBody": "Cada transacción en un solo lugar. Ordena, busca y analiza tu historial de gastos.",
-    "headerCta": "Agregar Gasto",
-    "filtersHeading": "Filtrar y Buscar",
-    "filtersBody": "Reduce tus gastos por rango de fechas, categoría o palabra clave. Los filtros se aplican al instante.",
-    "tableHeading": "Registros de Gastos",
-    "tableBody": "Tu registro completo de transacciones, ordenado por fecha en orden descendente de forma predeterminada.",
-    "paginationHeading": "Navegación de Páginas",
-    "paginationBody": "Los gastos se paginan a 20 filas por página.",
-    "emptyHeading": "No se Encontraron Gastos",
-    "emptyBody": "Cuando ningún gasto coincide con tus filtros actuales, o tu cuenta es nueva, aparece este estado.",
-    "emptyCta": "Agrega Tu Primer Gasto",
-    "header": [
-      "Navigate to Dashboard for a high-level summary of your monthly spend",
-      "Use Budget Settings to set per-category limits that keep your finances on track",
-      "Click any row to edit the expense or hit the trash icon to delete it instantly"
-    ],
-    "filters": [
-      "Search by keyword — match expense titles like 'Uber', 'Netflix', or 'Grocery Run'",
-      "Filter by category — Food, Transport, Shopping, Bills, Health, Entertainment, or Other",
-      "Set a custom date range — pick any start and end date to isolate a specific period",
-      "Sort by amount (high to low or low to high) or by date (newest or oldest first)",
-      "Reset all filters with one click to return to the full unfiltered expense list"
-    ],
-    "expenseTable": [
-      "Title — a short description of the expense",
-      "Category — color-coded badge showing Food, Transport, Bills, Health, Shopping, Entertainment, or Other",
-      "Amount — displayed in your preferred currency with two decimal precision",
-      "Date — the expense date formatted as MMM DD, YYYY",
-      "Notes — optional memo visible on hover via tooltip",
-      "Actions — Edit button opens the expense form pre-filled; Delete triggers a confirmation modal",
-      "Rows are highlighted on hover with an indigo glow",
-      "Clicking the Amount column header toggles ascending / descending sort",
-      "Clicking the Date column header toggles newest-first / oldest-first ordering",
-      "Each row shows a category icon alongside the badge for fast visual scanning"
-    ],
-    "pagination": [
-      "Previous — go back one page; disabled and dimmed when you're on the first page",
-      "Page indicator — shows current page and total, e.g. 'Page 3 of 7'",
-      "Next — advance one page; disabled and dimmed when you've reached the last page",
-      "Direct page jump — type a page number and press Enter to skip straight to that page",
-      "Results count — displays total matching expenses, e.g. '134 expenses found'"
-    ],
-    "emptyState": [
-      "If filters are active — 'No expenses match your search. Try adjusting the date range, category, or keyword.'",
-      "If the account is new — 'You haven't logged any expenses yet. Hit the button below to record your first one.'",
-      "Clear Filters button — resets all active filters and returns to the full expense list",
-      "Add Expense shortcut — takes you directly to /expenses/add"
-    ]
-  },
-  "budget": {
-    "heading": "Configuración de Presupuesto",
-    "body": "Establece límites de gasto mensual para cada categoría. ExpenseIQ te alertará cuando te acerques o superes tu límite.",
-    "overviewTitle": "Presupuesto Mensual Total",
-    "saveButton": "Guardar Configuración de Presupuesto",
-    "resetButton": "Restablecer Valores Predeterminados"
-  },
-  "profile": {
-    "heading": "Configuración de Cuenta",
-    "body": "Administra tu información personal, preferencias y configuración de seguridad.",
-    "accountSection": "Información de Cuenta",
-    "preferencesSection": "Preferencias",
-    "securitySection": "Seguridad",
-    "logoutButton": "Cerrar Sesión",
-    "saveButton": "Guardar Cambios"
   },
   "common": {
     "loading": "Cargando...",
@@ -255,16 +16,105 @@
     "cancel": "Cancelar",
     "delete": "Eliminar",
     "edit": "Editar",
-    "add": "Añadir",
+    "add": "Agregar",
     "search": "Buscar",
     "filter": "Filtrar",
-    "reset": "Restablecer",
-    "confirm": "Confirmar",
+    "export": "Exportar",
     "back": "Atrás",
     "next": "Siguiente",
     "previous": "Anterior",
-    "close": "Cerrar",
-    "submit": "Enviar",
-    "currency": "USD"
+    "confirm": "Confirmar",
+    "close": "Cerrar"
+  },
+  "login": {
+    "title": "Bienvenido de vuelta",
+    "subtitle": "Inicia sesión en tu cuenta de ExpenseIQ",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "forgotPassword": "¿Olvidaste tu contraseña?",
+    "signIn": "Iniciar sesión",
+    "noAccount": "¿No tienes cuenta?",
+    "signUp": "Registrarse",
+    "feature1": "Seguimiento de gastos en tiempo real",
+    "feature2": "Seguridad de nivel bancario",
+    "feature3": "Sincronización instantánea entre dispositivos",
+    "errorEmailNotConfirmed": "Por favor confirma tu correo electrónico antes de iniciar sesión.",
+    "errorInvalidCredentials": "Correo electrónico o contraseña inválidos.",
+    "errorGeneric": "Algo salió mal. Por favor intenta de nuevo.",
+    "successMessage": "¡Sesión iniciada correctamente!",
+    "emailLabel": "Correo electrónico",
+    "emailPlaceholder": "tu@ejemplo.com",
+    "heading": "Bienvenido de vuelta",
+    "heroBadge": "Inicio de sesión seguro",
+    "hidePassword": "Ocultar",
+    "orDivider": "o",
+    "passwordLabel": "Contraseña",
+    "passwordPlaceholder": "Ingresa tu contraseña",
+    "showPassword": "Mostrar",
+    "signUpLink": "Crear una cuenta",
+    "signingIn": "Iniciando sesión…",
+    "subheading": "Inicia sesión en tu cuenta para continuar.",
+    "submitButton": "Iniciar sesión"
+  },
+  "signup": {
+    "title": "Crea tu cuenta",
+    "subtitle": "Comienza a rastrear tus gastos hoy",
+    "fullName": "Nombre completo",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "confirmPassword": "Confirmar contraseña",
+    "signUp": "Crear cuenta",
+    "hasAccount": "¿Ya tienes una cuenta?",
+    "signIn": "Iniciar sesión",
+    "successTitle": "¡Revisa tu correo!",
+    "successMessage": "Enviamos un enlace de confirmación a tu correo electrónico.",
+    "errorGeneric": "Algo salió mal. Por favor, intenta de nuevo."
+  },
+  "dashboard": {
+    "title": "Panel de control",
+    "totalSpent": "Total gastado",
+    "monthlyBudget": "Presupuesto mensual",
+    "topCategory": "Categoría principal",
+    "transactions": "Transacciones",
+    "recentExpenses": "Gastos recientes",
+    "monthlyOverview": "Resumen mensual",
+    "categoryBreakdown": "Desglose por categoría",
+    "viewAll": "Ver todo",
+    "addExpense": "Agregar gasto"
+  },
+  "expenses": {
+    "title": "Gastos",
+    "addExpense": "Agregar gasto",
+    "searchPlaceholder": "Buscar gastos...",
+    "noExpenses": "No se encontraron gastos",
+    "noExpensesFiltered": "Ningún gasto coincide con tus filtros",
+    "deleteConfirm": "¿Estás seguro de que deseas eliminar este gasto?",
+    "deleteSuccess": "Gasto eliminado correctamente",
+    "deleteError": "Error al eliminar el gasto"
+  },
+  "budget": {
+    "title": "Presupuesto",
+    "totalBudget": "Presupuesto Total",
+    "totalSpent": "Total Gastado",
+    "remaining": "Restante",
+    "overBudget": "Presupuesto Excedido",
+    "settings": "Configuración de Presupuesto",
+    "nobudget": "Sin presupuesto establecido"
+  },
+  "footer": {
+    "product": "Producto",
+    "legal": "Legal",
+    "rights": "Todos los derechos reservados.",
+    "privacy": "Política de Privacidad",
+    "terms": "Términos de Servicio",
+    "support": "Soporte"
+  },
+  "profile": {
+    "title": "Perfil",
+    "email": "Correo Electrónico",
+    "memberSince": "Miembro desde",
+    "accountSettings": "Configuración de Cuenta",
+    "budgetSettings": "Configuración de Presupuesto",
+    "signOut": "Cerrar Sesión"
   }
 }

@@ -7,11 +7,25 @@ import Link from "next/link";
 import { Reveal } from "@/components/Reveal";
 import { createClient } from "@/lib/supabase/client";
 import { EXPENSE_CATEGORIES } from "@/lib/data";
-type formatCurrency = any;
-const formatCurrency: any = [];
-type formatDate = any;
-const formatDate: any = [];
 import { fadeInUp, staggerContainer, scaleIn } from "@/lib/motion";
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatCurrency(amount: number, currency = 'USD'): string {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount ?? 0);
+  } catch {
+    return `$${(amount ?? 0).toFixed(2)}`;
+  }
+}
+
+function formatDate(dateStr: string): string {
+  try {
+    return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,17 +121,17 @@ function EmptyState({ filtered }: { filtered: boolean }) {
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--accent)]/10 text-3xl">
         {filtered ? "🔍" : "💸"}
       </div>
-      <h3 className="text-lg font-semibold text-[hsl(var(--foreground))]">
+      <h3 className="text-lg font-semibold text-[var(--foreground)]">
         {filtered ? "No matching expenses" : "No expenses yet"}
       </h3>
-      <p className="mt-1.5 max-w-xs text-sm text-[hsl(var(--muted-foreground))]">
+      <p className="mt-1.5 max-w-xs text-sm text-[var(--muted-foreground)]">
         {filtered
           ? "Try adjusting your filters or search query to find what you're looking for."
           : "Start tracking your spending by adding your first expense."}
       </p>
       {!filtered && (
         <Link
-          href="/expenses/new"
+          href="/expenses/add"
           className="mt-6 inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-black transition-all duration-200 hover:opacity-90 hover:shadow-lg"
         >
           <Plus className="h-4 w-4" />
@@ -142,48 +156,44 @@ function DeleteConfirmModal({
   return (
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        key="overlay"
         variants={overlayVariants}
         initial="hidden"
         animate="visible"
         exit="exit"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4"
+        onClick={onCancel}
       >
         <motion.div
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-          onClick={onCancel}
-        />
-        <motion.div
-          className="relative z-10 w-full max-w-md rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-[0_8px_40px_rgba(0,0,0,0.3)]"
+          key="modal"
           variants={modalVariants}
           initial="hidden"
           animate="visible"
           exit="exit"
+          className="relative w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-[0_8px_40px_rgba(0,0,0,0.5)]"
+          onClick={(e) => e.stopPropagation()}
         >
           <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-red-500/10">
-            <AlertCircle className="h-6 w-6 text-red-500" />
+            <AlertCircle className="h-6 w-6 text-red-400" />
           </div>
-          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">
-            Delete Expense
-          </h2>
-          <p className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+          <h2 className="text-lg font-semibold text-[var(--foreground)]">Delete Expense</h2>
+          <p className="mt-2 text-sm text-[var(--muted-foreground)]">
             Are you sure you want to delete{" "}
-            <span className="font-medium text-[hsl(var(--foreground))]">
-              &ldquo;{expense.title}&rdquo;
-            </span>
-            ? This action cannot be undone.
+            <span className="font-medium text-[var(--foreground)]">{expense.title}</span>? This
+            action cannot be undone.
           </p>
           <div className="mt-6 flex gap-3">
             <button
               onClick={onCancel}
               disabled={loading}
-              className="flex-1 rounded-xl border border-[hsl(var(--border))] bg-transparent px-4 py-2.5 text-sm font-medium text-[hsl(var(--foreground))] transition-colors hover:bg-[hsl(var(--muted))] disabled:opacity-50"
+              className="flex-1 rounded-xl border border-[var(--border)] bg-transparent px-4 py-2.5 text-sm font-medium text-[var(--foreground)] transition-colors hover:bg-white/5 disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               onClick={onConfirm}
               disabled={loading}
-              className="flex-1 rounded-xl bg-red-500 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-red-600 disabled:opacity-50"
+              className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white transition-all hover:bg-red-500 disabled:opacity-50"
             >
               {loading ? "Deleting..." : "Delete"}
             </button>
@@ -194,167 +204,119 @@ function DeleteConfirmModal({
   );
 }
 
-function SortIcon({
-  field,
-  active,
-  dir,
-}: {
-  field: SortField;
-  active: SortField;
-  dir: SortDir;
-}) {
-  if (field !== active)
-    return (
-      <span className="ml-1 opacity-30">
-        <ChevronDown className="inline h-3.5 w-3.5" />
-      </span>
-    );
-  return dir === "asc" ? (
-    <ChevronUp className="ml-1 inline h-3.5 w-3.5 text-[var(--accent)]" />
-  ) : (
-    <ChevronDown className="ml-1 inline h-3.5 w-3.5 text-[var(--accent)]" />
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function ExpensesPage() {
-  const supabase = createClient();
-
-  // Data state
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Filter state
+  // Filters
   const [search, setSearch] = useState("");
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [catDropOpen, setCatDropOpen] = useState(false);
-  const catDropRef = useRef<HTMLDivElement>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
-  // Sort state
+  // Sorting
   const [sortField, setSortField] = useState<SortField>("expense_date");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
   // Pagination
   const [page, setPage] = useState(1);
 
-  // Delete modal
+  // Delete
   const [deleteTarget, setDeleteTarget] = useState<Expense | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
 
-  // ── Fetch data ──────────────────────────────────────────────────────────────
+  const supabase = createClient();
 
-  const fetchExpenses = useCallback(async () => {
+  // ── Fetch data ──────────────────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from("expenses")
-        .select("*")
-        .order("expense_date", { ascending: false });
-      if (err) throw err;
-      setExpenses(data ?? []);
-    } catch (e) {
-      setError((e as Error).message ?? "Failed to load expenses.");
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        setError("Please log in to view your expenses.");
+        setLoading(false);
+        return;
+      }
+
+      const [catResult, expResult] = await Promise.all([
+        supabase.from("categories").select("*").order("name"),
+        supabase
+          .from("expenses")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("expense_date", { ascending: false }),
+      ]);
+
+      if (catResult.error) throw catResult.error;
+      if (expResult.error) throw expResult.error;
+
+      setCategories((catResult.data as Category[]) ?? []);
+      setExpenses((expResult.data as Expense[]) ?? []);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load expenses.";
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  }, [supabase]);
-
-  const fetchCategories = useCallback(async () => {
-    const { data } = await supabase.from("categories").select("*");
-    setCategories(data ?? []);
-  }, [supabase]);
-
-  useEffect(() => {
-    fetchExpenses();
-    fetchCategories();
-  }, [fetchExpenses, fetchCategories]);
-
-  // ── Realtime subscription ───────────────────────────────────────────────────
-
-  useEffect(() => {
-    const channel = supabase
-      .channel("expenses-realtime")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "expenses" },
-        () => {
-          fetchExpenses();
-        }
-      )
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [supabase, fetchExpenses]);
-
-  // ── Close category dropdown on outside click ────────────────────────────────
-
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (
-        catDropRef.current &&
-        !catDropRef.current.contains(e.target as Node)
-      ) {
-        setCatDropOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  // ── Filter + sort ───────────────────────────────────────────────────────────
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-  const filtered = expenses.filter((exp) => {
-    const q = search.toLowerCase();
+  // ── Filtering ───────────────────────────────────────────────────────────────
+  const filtered = expenses.filter((e) => {
     const matchSearch =
-      !q ||
-      exp.title.toLowerCase().includes(q) ||
-      (exp.notes ?? "").toLowerCase().includes(q);
+      !search ||
+      e.title.toLowerCase().includes(search.toLowerCase()) ||
+      (e.notes ?? "").toLowerCase().includes(search.toLowerCase());
 
-    const matchCat =
-      selectedCategories.length === 0 ||
-      selectedCategories.includes(exp.category_id);
+    const matchCategory =
+      selectedCategory === "all" || e.category_id === selectedCategory;
 
-    const matchFrom = !dateFrom || exp.expense_date >= dateFrom;
-    const matchTo = !dateTo || exp.expense_date <= dateTo;
+    const matchFrom = !dateFrom || e.expense_date >= dateFrom;
+    const matchTo = !dateTo || e.expense_date <= dateTo;
 
-    return matchSearch && matchCat && matchFrom && matchTo;
+    return matchSearch && matchCategory && matchFrom && matchTo;
   });
 
+  // ── Sorting ─────────────────────────────────────────────────────────────────
   const sorted = [...filtered].sort((a, b) => {
-    let cmp = 0;
-    if (sortField === "title") {
-      cmp = a.title.localeCompare(b.title);
-    } else if (sortField === "amount") {
-      cmp = parseFloat(a.amount) - parseFloat(b.amount);
+    let aVal: string | number = "";
+    let bVal: string | number = "";
+
+    if (sortField === "amount") {
+      aVal = parseFloat(a.amount) || 0;
+      bVal = parseFloat(b.amount) || 0;
     } else if (sortField === "expense_date") {
-      cmp = a.expense_date.localeCompare(b.expense_date);
+      aVal = a.expense_date;
+      bVal = b.expense_date;
+    } else if (sortField === "title") {
+      aVal = a.title.toLowerCase();
+      bVal = b.title.toLowerCase();
     } else if (sortField === "category") {
-      const catA =
-        categories.find((c) => c.id === a.category_id)?.name ?? "";
-      const catB =
-        categories.find((c) => c.id === b.category_id)?.name ?? "";
-      cmp = catA.localeCompare(catB);
+      const aCat = categories.find((c) => c.id === a.category_id)?.name ?? "";
+      const bCat = categories.find((c) => c.id === b.category_id)?.name ?? "";
+      aVal = aCat.toLowerCase();
+      bVal = bCat.toLowerCase();
     }
-    return sortDir === "asc" ? cmp : -cmp;
+
+    if (aVal < bVal) return sortDir === "asc" ? -1 : 1;
+    if (aVal > bVal) return sortDir === "asc" ? 1 : -1;
+    return 0;
   });
 
+  // ── Pagination ──────────────────────────────────────────────────────────────
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-  const safePage = Math.min(page, totalPages);
-  const paginated = sorted.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE
-  );
+  const paginated = sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  // ── Sort toggle ─────────────────────────────────────────────────────────────
-
-  function handleSort(field: SortField) {
+  const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     } else {
@@ -362,79 +324,72 @@ export default function ExpensesPage() {
       setSortDir("asc");
     }
     setPage(1);
-  }
+  };
+
+  const SortIcon = ({ field }: { field: SortField }) => {
+    if (sortField !== field) return <ChevronDown className="h-3.5 w-3.5 opacity-30" />;
+    return sortDir === "asc" ? (
+      <ChevronUp className="h-3.5 w-3.5 text-[var(--primary)]" />
+    ) : (
+      <ChevronDown className="h-3.5 w-3.5 text-[var(--primary)]" />
+    );
+  };
 
   // ── Delete ──────────────────────────────────────────────────────────────────
-
-  async function handleDelete() {
+  const handleDelete = async () => {
     if (!deleteTarget) return;
     setDeleteLoading(true);
     try {
-      const { error: err } = await supabase
+      const { error: delErr } = await supabase
         .from("expenses")
         .delete()
         .eq("id", deleteTarget.id);
-      if (err) throw err;
+      if (delErr) throw delErr;
+      setExpenses((prev) => prev.filter((e) => e.id !== deleteTarget.id));
       setDeleteTarget(null);
-    } catch (e) {
-      console.error("Delete failed:", e);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to delete expense.";
+      setError(msg);
     } finally {
       setDeleteLoading(false);
     }
-  }
+  };
 
-  // ── Category toggle ─────────────────────────────────────────────────────────
+  const isFiltered =
+    search !== "" ||
+    selectedCategory !== "all" ||
+    dateFrom !== "" ||
+    dateTo !== "";
 
-  function toggleCategory(id: string) {
-    setSelectedCategories((prev) =>
-      prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]
-    );
-    setPage(1);
-  }
-
-  function clearFilters() {
-    setSearch("");
-    setSelectedCategories([]);
-    setDateFrom("");
-    setDateTo("");
-    setPage(1);
-  }
-
-  const hasFilters =
-    search || selectedCategories.length > 0 || dateFrom || dateTo;
+  const totalSpent = filtered.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
 
   // ── Render ──────────────────────────────────────────────────────────────────
-
   return (
-    <div className="min-h-screen bg-[hsl(var(--background))]">
-      <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[var(--background)] mesh-bg">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pt-24">
         {/* Header */}
         <Reveal>
-          <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
             <div>
-              <div className="mb-1 flex items-center gap-2 text-sm text-[hsl(var(--muted-foreground))]">
+              <div className="flex items-center gap-2 mb-1">
                 <Link
                   href="/dashboard"
-                  className="flex items-center gap-1 hover:text-[var(--accent)] transition-colors"
+                  className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Dashboard
+                  <ArrowLeft className="h-4 w-4" />
                 </Link>
-                <ChevronRight className="h-3.5 w-3.5 opacity-40" />
-                <span>Expenses</span>
+                <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
+                  Expenses
+                </h1>
               </div>
-              <h1 className="text-3xl font-bold tracking-tight text-[hsl(var(--foreground))]">
-                All Expenses
-              </h1>
-              <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                {loading
-                  ? "Loading..."
-                  : `${filtered.length} expense${filtered.length !== 1 ? "s" : ""} found`}
+              <p className="text-sm text-[var(--muted-foreground)]">
+                {filtered.length} expense{filtered.length !== 1 ? "s" : ""} &middot;{" "}
+                {formatCurrency(totalSpent)} total
               </p>
             </div>
             <Link
-              href="/expenses/new"
-              className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-2.5 text-sm font-semibold text-black shadow-[0_2px_12px_var(--accent)/30] transition-all duration-200 hover:opacity-90 hover:shadow-lg"
+              href="/expenses/add"
+              className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_16px_rgba(99,102,241,0.3)] transition-all duration-200 hover:opacity-90 hover:shadow-[0_0_24px_rgba(99,102,241,0.45)]"
             >
               <Plus className="h-4 w-4" />
               Add Expense
@@ -442,410 +397,333 @@ export default function ExpensesPage() {
           </div>
         </Reveal>
 
-        {/* Filter Bar */}
+        {/* Search + Filter bar */}
         <Reveal delay={0.05}>
-          <div className="mb-6 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_4px_16px_-4px_rgba(0,0,0,0.1)]">
-            <div className="flex flex-wrap gap-3">
-              {/* Search */}
-              <div className="relative min-w-[200px] flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
-                <input
-                  type="text"
-                  placeholder="Search expenses..."
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value);
-                    setPage(1);
-                  }}
-                  className="h-10 w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-9 pr-4 text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all"
-                />
-              </div>
-
-              {/* Date From */}
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => {
-                    setDateFrom(e.target.value);
-                    setPage(1);
-                  }}
-                  className="h-10 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-9 pr-3 text-sm text-[hsl(var(--foreground))] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all"
-                />
-              </div>
-
-              {/* Date To */}
-              <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[hsl(var(--muted-foreground))]" />
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => {
-                    setDateTo(e.target.value);
-                    setPage(1);
-                  }}
-                  className="h-10 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] pl-9 pr-3 text-sm text-[hsl(var(--foreground))] focus:border-[var(--accent)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]/20 transition-all"
-                />
-              </div>
-
-              {/* Category Multi-select */}
-              <div className="relative" ref={catDropRef}>
+          <div className="mb-4 flex flex-col sm:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[var(--muted-foreground)]" />
+              <input
+                type="text"
+                placeholder="Search expenses..."
+                value={search}
+                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] pl-9 pr-4 py-2.5 text-sm text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors"
+              />
+              {search && (
                 <button
-                  onClick={() => setCatDropOpen((o) => !o)}
-                  className={cn(
-                    "flex h-10 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition-all",
-                    selectedCategories.length > 0
-                      ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
-                      : "border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))]"
-                  )}
+                  onClick={() => { setSearch(""); setPage(1); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
                 >
-                  <Filter className="h-4 w-4" />
-                  {selectedCategories.length > 0
-                    ? `${selectedCategories.length} categor${selectedCategories.length > 1 ? "ies" : "y"}`
-                    : "All Categories"}
-                  <ChevronDown
-                    className={cn(
-                      "h-3.5 w-3.5 transition-transform",
-                      catDropOpen && "rotate-180"
-                    )}
-                  />
-                </button>
-
-                <AnimatePresence>
-                  {catDropOpen && (
-                    <motion.div
-                      initial={{ opacity: 0, y: 6, scale: 0.97 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 6, scale: 0.97 }}
-                      transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-12 z-30 w-56 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 shadow-[0_8px_32px_rgba(0,0,0,0.2)]"
-                    >
-                      {categories.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-[hsl(var(--muted-foreground))]">
-                          Loading categories...
-                        </p>
-                      ) : (
-                        categories.map((cat) => {
-                          const checked = selectedCategories.includes(cat.id);
-                          return (
-                            <button
-                              key={cat.id}
-                              onClick={() => toggleCategory(cat.id)}
-                              className={cn(
-                                "flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-sm transition-colors",
-                                checked
-                                  ? "bg-[var(--accent)]/10 text-[var(--accent)]"
-                                  : "text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))]"
-                              )}
-                            >
-                              <span>{cat.icon ?? "📦"}</span>
-                              <span className="flex-1 text-left">
-                                {cat.name}
-                              </span>
-                              {checked && (
-                                <span className="h-4 w-4 rounded-full bg-[var(--accent)] text-center text-[10px] leading-4 text-black">
-                                  ✓
-                                </span>
-                              )}
-                            </button>
-                          );
-                        })
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-
-              {/* Clear filters */}
-              {hasFilters && (
-                <button
-                  onClick={clearFilters}
-                  className="flex h-10 items-center gap-1.5 rounded-xl border border-[hsl(var(--border))] px-3 text-sm text-[hsl(var(--muted-foreground))] transition-colors hover:border-red-400 hover:text-red-400"
-                >
-                  <X className="h-3.5 w-3.5" />
-                  Clear
+                  <X className="h-4 w-4" />
                 </button>
               )}
             </div>
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
+                showFilters
+                  ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)]"
+                  : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+              )}
+            >
+              <Filter className="h-4 w-4" />
+              Filters
+              {isFiltered && (
+                <span className="ml-1 flex h-4 w-4 items-center justify-center rounded-full bg-[var(--primary)] text-[10px] font-bold text-white">
+                  !
+                </span>
+              )}
+            </button>
           </div>
+
+          {/* Expanded filters */}
+          <AnimatePresence>
+            {showFilters && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="mb-4 grid grid-cols-1 sm:grid-cols-3 gap-3 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4">
+                  {/* Category filter */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">
+                      Category
+                    </label>
+                    <select
+                      value={selectedCategory}
+                      onChange={(e) => { setSelectedCategory(e.target.value); setPage(1); }}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors"
+                    >
+                      <option value="all">All Categories</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>
+                          {cat.icon} {cat.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Date from */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">
+                      From
+                    </label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors"
+                    />
+                  </div>
+
+                  {/* Date to */}
+                  <div>
+                    <label className="block text-xs font-medium text-[var(--muted-foreground)] mb-1.5">
+                      To
+                    </label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                      className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-3 py-2 text-sm text-[var(--foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors"
+                    />
+                  </div>
+                </div>
+
+                {isFiltered && (
+                  <button
+                    onClick={() => {
+                      setSearch("");
+                      setSelectedCategory("all");
+                      setDateFrom("");
+                      setDateTo("");
+                      setPage(1);
+                    }}
+                    className="mb-4 text-xs text-[var(--muted-foreground)] hover:text-[var(--foreground)] underline transition-colors"
+                  >
+                    Clear all filters
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </Reveal>
 
         {/* Error */}
         {error && (
-          <Reveal>
-            <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              {error}
-            </div>
-          </Reveal>
+          <div className="mb-4 flex items-center gap-3 rounded-xl border border-red-800/40 bg-red-950/30 px-4 py-3 text-sm text-red-300">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {error}
+          </div>
         )}
 
         {/* Table */}
-        <Reveal delay={0.08}>
-          <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.12)] overflow-hidden">
+        <Reveal delay={0.1}>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] overflow-hidden shadow-[0_2px_4px_rgba(0,0,0,0.08),0_8px_32px_-8px_rgba(0,0,0,0.24)]">
             {loading ? (
-              <div className="flex flex-col gap-3 p-6">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="h-12 animate-pulse rounded-xl bg-[hsl(var(--muted))]"
-                    style={{ opacity: 1 - i * 0.12 }}
-                  />
-                ))}
+              <div className="flex items-center justify-center py-24">
+                <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--border)] border-t-[var(--primary)]" />
               </div>
-            ) : sorted.length === 0 ? (
-              <EmptyState filtered={!!hasFilters} />
+            ) : paginated.length === 0 ? (
+              <EmptyState filtered={isFiltered} />
             ) : (
               <>
                 {/* Desktop table */}
-                <div className="hidden overflow-x-auto md:block">
+                <div className="hidden md:block overflow-x-auto">
                   <table className="w-full text-sm">
                     <thead>
-                      <tr className="border-b border-[hsl(var(--border))] bg-[hsl(var(--muted))]/40">
-                        {(
-                          [
-                            { label: "Title", field: "title" as SortField },
-                            {
-                              label: "Category",
-                              field: "category" as SortField,
-                            },
-                            { label: "Amount", field: "amount" as SortField },
-                            { label: "Date", field: "expense_date" as SortField },
-                            { label: "Notes", field: null },
-                            { label: "Actions", field: null },
-                          ] as { label: string; field: SortField | null }[]
-                        ).map(({ label, field }) => (
-                          <th
-                            key={label}
-                            className={cn(
-                              "px-5 py-3.5 text-left text-xs font-semibold uppercase tracking-wide text-[hsl(var(--muted-foreground))]",
-                              field && "cursor-pointer select-none hover:text-[hsl(var(--foreground))] transition-colors"
-                            )}
-                            onClick={() => field && handleSort(field)}
+                      <tr className="border-b border-[var(--border)] bg-[var(--background)]/50">
+                        <th className="px-5 py-3.5 text-left">
+                          <button
+                            onClick={() => handleSort("title")}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
                           >
-                            {label}
-                            {field && (
-                              <SortIcon
-                                field={field}
-                                active={sortField}
-                                dir={sortDir}
-                              />
-                            )}
-                          </th>
-                        ))}
+                            Title <SortIcon field="title" />
+                          </button>
+                        </th>
+                        <th className="px-5 py-3.5 text-left">
+                          <button
+                            onClick={() => handleSort("category")}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                          >
+                            Category <SortIcon field="category" />
+                          </button>
+                        </th>
+                        <th className="px-5 py-3.5 text-left">
+                          <button
+                            onClick={() => handleSort("expense_date")}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                          >
+                            Date <SortIcon field="expense_date" />
+                          </button>
+                        </th>
+                        <th className="px-5 py-3.5 text-right">
+                          <button
+                            onClick={() => handleSort("amount")}
+                            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                          >
+                            Amount <SortIcon field="amount" />
+                          </button>
+                        </th>
+                        <th className="px-5 py-3.5 text-right">
+                          <span className="text-xs font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+                            Actions
+                          </span>
+                        </th>
                       </tr>
                     </thead>
-                    <motion.tbody
-                      variants={staggerContainer}
-                      initial="hidden"
-                      animate="visible"
-                    >
-                      {paginated.map((exp) => {
-                        const cat = categories.find(
-                          (c) => c.id === exp.category_id
-                        );
-                        return (
-                          <motion.tr
-                            key={exp.id}
-                            variants={fadeInUp}
-                            className="group border-b border-[hsl(var(--border))]/60 transition-colors last:border-0 hover:bg-[hsl(var(--muted))]/30"
-                          >
-                            <td className="px-5 py-4">
-                              <span className="font-medium text-[hsl(var(--foreground))]">
-                                {exp.title}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4">
-                              <CategoryBadge category={cat} />
-                            </td>
-                            <td className="px-5 py-4">
-                              <span className="font-semibold tabular-nums text-[hsl(var(--foreground))]">
-                                {formatCurrency(exp.amount, exp.currency)}
-                              </span>
-                            </td>
-                            <td className="px-5 py-4 text-[hsl(var(--muted-foreground))]">
-                              {formatDate(exp.expense_date)}
-                            </td>
-                            <td className="max-w-[180px] px-5 py-4">
-                              {exp.notes ? (
-                                <span
-                                  className="block truncate text-[hsl(var(--muted-foreground))]"
-                                  title={exp.notes}
-                                >
-                                  {exp.notes}
-                                </span>
-                              ) : (
-                                <span className="text-[hsl(var(--muted-foreground))]/40">
-                                  —
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-5 py-4">
-                              <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
-                                <Link
-                                  href={`/expenses/${exp.id}/edit`}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--muted-foreground))] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                                >
-                                  <Edit className="h-3.5 w-3.5" />
-                                </Link>
-                                <button
-                                  onClick={() => setDeleteTarget(exp)}
-                                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--muted-foreground))] transition-all hover:border-red-400 hover:text-red-400"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </button>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        );
-                      })}
-                    </motion.tbody>
+                    <tbody className="divide-y divide-[var(--border)]">
+                      <AnimatePresence mode="popLayout">
+                        {paginated.map((expense) => {
+                          const cat = categories.find((c) => c.id === expense.category_id);
+                          return (
+                            <motion.tr
+                              key={expense.id}
+                              variants={fadeInUp}
+                              initial="hidden"
+                              animate="visible"
+                              exit={{ opacity: 0, x: -20 }}
+                              className="group hover:bg-white/[0.02] transition-colors"
+                            >
+                              <td className="px-5 py-4">
+                                <div className="font-medium text-[var(--foreground)]">{expense.title}</div>
+                                {expense.notes && (
+                                  <div className="mt-0.5 text-xs text-[var(--muted-foreground)] truncate max-w-[200px]">
+                                    {expense.notes}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="px-5 py-4">
+                                <CategoryBadge category={cat} />
+                              </td>
+                              <td className="px-5 py-4 text-[var(--muted-foreground)]">
+                                {formatDate(expense.expense_date)}
+                              </td>
+                              <td className="px-5 py-4 text-right font-semibold text-[var(--foreground)]">
+                                {formatCurrency(parseFloat(expense.amount) || 0, expense.currency)}
+                              </td>
+                              <td className="px-5 py-4">
+                                <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <Link
+                                    href={`/expenses/add?id=${expense.id}`}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--primary)] hover:border-[var(--primary)] transition-colors"
+                                    title="Edit"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                  </Link>
+                                  <button
+                                    onClick={() => setDeleteTarget(expense)}
+                                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-red-400 hover:border-red-800 transition-colors"
+                                    title="Delete"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </motion.tr>
+                          );
+                        })}
+                      </AnimatePresence>
+                    </tbody>
                   </table>
                 </div>
 
                 {/* Mobile cards */}
-                <motion.div
-                  className="flex flex-col divide-y divide-[hsl(var(--border))]/60 md:hidden"
-                  variants={staggerContainer}
-                  initial="hidden"
-                  animate="visible"
-                >
-                  {paginated.map((exp) => {
-                    const cat = categories.find(
-                      (c) => c.id === exp.category_id
-                    );
+                <div className="md:hidden divide-y divide-[var(--border)]">
+                  {paginated.map((expense) => {
+                    const cat = categories.find((c) => c.id === expense.category_id);
                     return (
-                      <motion.div
-                        key={exp.id}
-                        variants={fadeInUp}
-                        className="flex items-start justify-between gap-3 p-4"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium text-[hsl(var(--foreground))]">
-                              {exp.title}
-                            </span>
+                      <div key={expense.id} className="px-4 py-4 flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-[var(--foreground)] truncate">{expense.title}</div>
+                          <div className="mt-1 flex items-center gap-2 flex-wrap">
                             <CategoryBadge category={cat} />
+                            <span className="text-xs text-[var(--muted-foreground)]">
+                              {formatDate(expense.expense_date)}
+                            </span>
                           </div>
-                          <div className="mt-1 flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
-                            <span>{formatDate(exp.expense_date)}</span>
-                            {exp.notes && (
-                              <>
-                                <span>·</span>
-                                <span className="truncate max-w-[140px]">
-                                  {exp.notes}
-                                </span>
-                              </>
-                            )}
-                          </div>
+                          {expense.notes && (
+                            <div className="mt-1 text-xs text-[var(--muted-foreground)] truncate">
+                              {expense.notes}
+                            </div>
+                          )}
                         </div>
-                        <div className="flex shrink-0 flex-col items-end gap-2">
-                          <span className="font-semibold tabular-nums text-[hsl(var(--foreground))]">
-                            {formatCurrency(exp.amount, exp.currency)}
+                        <div className="flex flex-col items-end gap-2 shrink-0">
+                          <span className="font-semibold text-[var(--foreground)]">
+                            {formatCurrency(parseFloat(expense.amount) || 0, expense.currency)}
                           </span>
-                          <div className="flex gap-1">
+                          <div className="flex items-center gap-1.5">
                             <Link
-                              href={`/expenses/${exp.id}/edit`}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                              href={`/expenses/add?id=${expense.id}`}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors"
                             >
                               <Edit className="h-3 w-3" />
                             </Link>
                             <button
-                              onClick={() => setDeleteTarget(exp)}
-                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] transition-all hover:border-red-400 hover:text-red-400"
+                              onClick={() => setDeleteTarget(expense)}
+                              className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-red-400 transition-colors"
                             >
                               <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
                         </div>
-                      </motion.div>
+                      </div>
                     );
                   })}
-                </motion.div>
+                </div>
+
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between border-t border-[var(--border)] px-5 py-4">
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Page {page} of {totalPages} &middot; {sorted.length} results
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ArrowLeft className="h-3.5 w-3.5" />
+                      </button>
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const pageNum = Math.max(1, Math.min(page - 2, totalPages - 4)) + i;
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setPage(pageNum)}
+                            className={cn(
+                              "flex h-8 w-8 items-center justify-center rounded-lg text-xs font-medium transition-colors",
+                              pageNum === page
+                                ? "bg-[var(--primary)] text-white"
+                                : "border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
+                            )}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                      <button
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                      >
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </>
             )}
           </div>
         </Reveal>
-
-        {/* Pagination */}
-        {!loading && sorted.length > PAGE_SIZE && (
-          <Reveal delay={0.1}>
-            <div className="mt-6 flex items-center justify-between gap-4">
-              <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                Showing{" "}
-                <span className="font-medium text-[hsl(var(--foreground))]">
-                  {(safePage - 1) * PAGE_SIZE + 1}
-                </span>{" "}
-                to{" "}
-                <span className="font-medium text-[hsl(var(--foreground))]">
-                  {Math.min(safePage * PAGE_SIZE, sorted.length)}
-                </span>{" "}
-                of{" "}
-                <span className="font-medium text-[hsl(var(--foreground))]">
-                  {sorted.length}
-                </span>{" "}
-                expenses
-              </p>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={safePage === 1}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1)
-                  .filter(
-                    (p) =>
-                      p === 1 ||
-                      p === totalPages ||
-                      Math.abs(p - safePage) <= 1
-                  )
-                  .reduce<(number | "...")[]>((acc, p, idx, arr) => {
-                    if (idx > 0 && p - (arr[idx - 1] as number) > 1) {
-                      acc.push("...");
-                    }
-                    acc.push(p);
-                    return acc;
-                  }, [])
-                  .map((p, i) =>
-                    p === "..." ? (
-                      <span
-                        key={`ellipsis-${i}`}
-                        className="flex h-9 w-9 items-center justify-center text-sm text-[hsl(var(--muted-foreground))]"
-                      >
-                        …
-                      </span>
-                    ) : (
-                      <button
-                        key={p}
-                        onClick={() => setPage(p as number)}
-                        className={cn(
-                          "flex h-9 w-9 items-center justify-center rounded-xl border text-sm font-medium transition-all",
-                          safePage === p
-                            ? "border-[var(--accent)] bg-[var(--accent)] text-black"
-                            : "border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:border-[var(--accent)] hover:text-[var(--accent)]"
-                        )}
-                      >
-                        {p}
-                      </button>
-                    )
-                  )}
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={safePage === totalPages}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] transition-all hover:border-[var(--accent)] hover:text-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronRight className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </Reveal>
-        )}
       </div>
 
-      {/* Delete Modal */}
+      {/* Delete modal */}
       {deleteTarget && (
         <DeleteConfirmModal
           expense={deleteTarget}

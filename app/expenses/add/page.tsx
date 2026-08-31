@@ -52,7 +52,7 @@ const DEFAULT_FORM: FormData = {
   amount: "",
   currency: "USD",
   category_id: "",
-  expense_date: "",
+  expense_date: getTodayString(),
   notes: "",
 };
 
@@ -81,10 +81,9 @@ function AddEditExpenseInner() {
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle");
   const [submitMessage, setSubmitMessage] = useState("");
 
-  const supabase = createClient();
-
   // ── Fetch categories ────────────────────────────────────────────────────────
   const fetchCategories = useCallback(async () => {
+    const supabase = createClient();
     const { data, error } = await supabase
       .from("categories")
       .select("id, name, icon, color")
@@ -108,6 +107,7 @@ function AddEditExpenseInner() {
   const fetchExpense = useCallback(
     async (id: string) => {
       setFetchingExpense(true);
+      const supabase = createClient();
       const { data, error } = await supabase
         .from("expenses")
         .select("*")
@@ -135,59 +135,45 @@ function AddEditExpenseInner() {
   useEffect(() => {
     if (expenseId) {
       fetchExpense(expenseId);
-    } else {
-      // Set today's date only on mount for new expense
-      setForm((prev) => ({ ...prev, expense_date: getTodayString() }));
     }
   }, [expenseId, fetchExpense]);
 
   // ── Validation ──────────────────────────────────────────────────────────────
-  const validate = (): boolean => {
-    const newErrors: FormErrors = {};
-    if (!form.category_id) newErrors.category_id = "Please select a category.";
-    if (!form.title.trim()) newErrors.title = "Expense title is required.";
-    else if (form.title.length > 200) newErrors.title = "Title must be under 200 characters.";
-    if (!form.amount) newErrors.amount = "Amount is required.";
-    else if (isNaN(parseFloat(form.amount)) || parseFloat(form.amount) <= 0)
-      newErrors.amount = "Enter a valid positive amount.";
-    if (!form.expense_date) newErrors.expense_date = "Date is required.";
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  // ── Field change ────────────────────────────────────────────────────────────
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
-  ) => {
-    const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
-    if (errors[name as keyof FormErrors]) {
-      setErrors((prev) => ({ ...prev, [name]: undefined }));
+  function validate(): boolean {
+    const errs: FormErrors = {};
+    if (!form.title.trim()) errs.title = "Title is required.";
+    if (!form.amount) {
+      errs.amount = "Amount is required.";
+    } else if (isNaN(Number(form.amount)) || Number(form.amount) <= 0) {
+      errs.amount = "Enter a valid positive amount.";
     }
-  };
+    if (!form.category_id) errs.category_id = "Please select a category.";
+    if (!form.expense_date) errs.expense_date = "Date is required.";
+    setErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
-  // ── Category select ─────────────────────────────────────────────────────────
-  const handleCategorySelect = (catId: string) => {
-    setForm((prev) => ({ ...prev, category_id: catId }));
-    if (errors.category_id) {
-      setErrors((prev) => ({ ...prev, category_id: undefined }));
-    }
-  };
-
-  // ── Save ────────────────────────────────────────────────────────────────────
-  const handleSave = async () => {
+  // ── Submit ──────────────────────────────────────────────────────────────────
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!validate()) return;
+
     setSaving(true);
     setSubmitStatus("idle");
-    setSubmitMessage("");
 
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated.");
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setSubmitStatus("error");
+        setSubmitMessage("You must be logged in to save an expense.");
+        setSaving(false);
+        return;
+      }
 
       const payload = {
+        user_id: user.id,
         title: form.title.trim(),
         amount: parseFloat(form.amount),
         currency: form.currency,
@@ -197,33 +183,40 @@ function AddEditExpenseInner() {
         updated_at: new Date().toISOString(),
       };
 
+      let saveError: { message: string } | null = null;
+
       if (isEditing && expenseId) {
         const { error } = await supabase
           .from("expenses")
           .update(payload)
           .eq("id", expenseId)
           .eq("user_id", user.id);
-        if (error) throw error;
+        saveError = error;
       } else {
-        const { error } = await supabase.from("expenses").insert({
-          ...payload,
-          user_id: user.id,
-          created_at: new Date().toISOString(),
-        });
-        if (error) throw error;
+        const { error } = await supabase
+          .from("expenses")
+          .insert({ ...payload, created_at: new Date().toISOString() });
+        saveError = error;
+      }
+
+      if (saveError) {
+        setSubmitStatus("error");
+        setSubmitMessage(saveError.message);
+        setSaving(false);
+        return;
       }
 
       setSubmitStatus("success");
-      setSubmitMessage(isEditing ? "Expense updated!" : "Expense saved!");
+      setSubmitMessage(
+        isEditing ? "Expense updated successfully!" : "Expense added successfully!"
+      );
 
       setTimeout(() => {
         router.push("/expenses");
-      }, 1500);
+      }, 1200);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save expense.";
       setSubmitStatus("error");
-      setSubmitMessage(message);
-    } finally {
+      setSubmitMessage("An unexpected error occurred. Please try again.");
       setSaving(false);
     }
   };
@@ -232,384 +225,369 @@ function AddEditExpenseInner() {
   const handleDelete = async () => {
     if (!expenseId) return;
     setDeleting(true);
+
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated.");
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        setDeleting(false);
+        return;
+      }
 
       const { error } = await supabase
         .from("expenses")
         .delete()
         .eq("id", expenseId)
         .eq("user_id", user.id);
-      if (error) throw error;
 
-      router.push("/expenses");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to delete expense.";
-      setSubmitStatus("error");
-      setSubmitMessage(message);
+      if (!error) {
+        router.push("/expenses");
+      } else {
+        setSubmitStatus("error");
+        setSubmitMessage(error.message);
+        setDeleting(false);
+        setShowDeleteConfirm(false);
+      }
+    } catch {
       setDeleting(false);
       setShowDeleteConfirm(false);
     }
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  // ── Field updater ───────────────────────────────────────────────────────────
+  function setField<K extends keyof FormData>(key: K, value: FormData[K]) {
+    setForm((prev) => ({ ...prev, [key]: value }));
+    if (errors[key]) setErrors((prev) => ({ ...prev, [key]: undefined }));
+  }
 
-  // Success overlay
-  if (submitStatus === "success") {
+  // ── Loading state ───────────────────────────────────────────────────────────
+  if (fetchingExpense) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--background)" }}>
-        <motion.div
-          initial={{ opacity: 0, scale: 0.85 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="flex flex-col items-center gap-4 text-center"
-        >
-          <div className="w-20 h-20 rounded-full bg-[#10B981]/20 flex items-center justify-center">
-            <Check className="w-10 h-10 text-[#10B981]" />
-          </div>
-          <h2 className="text-2xl font-bold text-[var(--foreground)]">{submitMessage}</h2>
-          <p className="text-[var(--muted-foreground)] text-sm">Redirecting to your expenses...</p>
-        </motion.div>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-[var(--primary)]" />
       </div>
     );
   }
 
-  return (
-    <div className="min-h-screen" style={{ background: "var(--background)" }}>
-      {/* ── Hero ── */}
-      <section className="relative py-12 mesh-bg">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6">
-          <Reveal>
-            <Link
-              href="/expenses"
-              className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors duration-200 mb-6 group"
-            >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform duration-200" />
-              Back to Expenses
-            </Link>
-          </Reveal>
+  const selectedCategory = categories.find((c) => c.id === form.category_id);
 
-          <Reveal delay={0.05}>
-            <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-[var(--foreground)] mb-3">
-              {isEditing ? "Edit Expense" : "Add New Expense"}
+  return (
+    <div className="min-h-screen mesh-bg pt-20 pb-16 px-4">
+      <div className="max-w-2xl mx-auto">
+        {/* Back link */}
+        <Reveal>
+          <Link
+            href="/expenses"
+            className="inline-flex items-center gap-2 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors duration-200 mb-6"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Expenses
+          </Link>
+        </Reveal>
+
+        {/* Header */}
+        <Reveal delay={0.05}>
+          <div className="mb-8">
+            <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
+              {isEditing ? "Edit Expense" : "Add Expense"}
             </h1>
-          </Reveal>
-
-          <Reveal delay={0.1}>
-            <p className="text-[var(--muted-foreground)] leading-relaxed">
-              Log your spending in seconds — categorized, dated, and saved to your account.
+            <p className="mt-1 text-sm text-[var(--muted-foreground)]">
+              {isEditing
+                ? "Update the details of your expense."
+                : "Log a new expense to keep your budget on track."}
             </p>
-          </Reveal>
-        </div>
-      </section>
+          </div>
+        </Reveal>
 
-      {/* ── Form Card ── */}
-      <section className="py-10 pb-24">
-        <div className="max-w-2xl mx-auto px-4 sm:px-6">
-          <Reveal delay={0.15}>
-            <div className="glass rounded-2xl border border-[var(--border)] p-6 sm:p-8 shadow-[0_4px_32px_rgba(0,0,0,0.35),0_1px_4px_rgba(99,102,241,0.08)]">
+        {/* Status banner */}
+        {submitStatus !== "idle" && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`mb-6 flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium border ${
+              submitStatus === "success"
+                ? "bg-emerald-950/60 border-emerald-800/50 text-emerald-300"
+                : "bg-red-950/60 border-red-800/50 text-red-300"
+            }`}
+          >
+            {submitStatus === "success" ? (
+              <Check className="h-4 w-4 shrink-0" />
+            ) : (
+              <AlertCircle className="h-4 w-4 shrink-0" />
+            )}
+            {submitMessage}
+          </motion.div>
+        )}
 
-              {/* Loading state for edit */}
-              {fetchingExpense ? (
-                <div className="flex flex-col items-center justify-center py-16 gap-4">
-                  <Loader2 className="w-10 h-10 text-[var(--primary)] animate-spin" />
-                  <p className="text-[var(--muted-foreground)] text-sm">Loading expense...</p>
-                </div>
-              ) : (
-                <motion.div
-                  variants={staggerContainer}
-                  initial="hidden"
-                  animate="visible"
-                  className="space-y-6"
-                >
-                  {/* ── Category Selector ── */}
-                  <motion.div variants={fadeInUp}>
-                    <label className={labelCls}>
-                      <Tag className="inline w-4 h-4 mr-1.5 opacity-70" />
-                      Category
-                    </label>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-2">
-                      {(categories.length > 0 ? categories : EXPENSE_CATEGORIES.map((c, i) => ({
-                        id: `static-${i}`,
-                        name: c.name,
-                        icon: c.icon,
-                        color: c.color,
-                      }))).map((cat) => {
-                        const isSelected = form.category_id === cat.id;
-                        return (
-                          <button
-                            key={cat.id}
-                            type="button"
-                            onClick={() => handleCategorySelect(cat.id)}
-                            className={[
-                              "flex flex-col items-center gap-1.5 rounded-xl border px-2 py-3 text-xs font-medium transition-all duration-200 cursor-pointer",
-                              isSelected
-                                ? "border-[var(--primary)] bg-[var(--primary)]/10 text-[var(--primary)] shadow-[0_0_12px_rgba(99,102,241,0.2)]"
-                                : "border-[var(--border)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/50 hover:text-[var(--foreground)]",
-                            ].join(" ")}
-                          >
-                            <span className="text-xl">{cat.icon ?? "📦"}</span>
-                            <span className="text-center leading-tight">{cat.name}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {errors.category_id && (
-                      <p className="mt-1.5 text-sm text-[var(--destructive)] flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        {errors.category_id}
-                      </p>
-                    )}
-                  </motion.div>
+        {/* Form card */}
+        <Reveal delay={0.1}>
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="glass rounded-2xl p-6 md:p-8 space-y-6"
+          >
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              animate="visible"
+              className="space-y-6"
+            >
+              {/* Title */}
+              <motion.div variants={fadeInUp}>
+                <label htmlFor="title" className={labelCls}>
+                  <span className="flex items-center gap-2">
+                    <FileText className="h-4 w-4 text-[var(--primary)]" />
+                    Title
+                  </span>
+                </label>
+                <input
+                  id="title"
+                  type="text"
+                  value={form.title}
+                  onChange={(e) => setField("title", e.target.value)}
+                  placeholder="e.g. Grocery run, Netflix subscription"
+                  className={inputCls}
+                  maxLength={120}
+                />
+                {errors.title && (
+                  <p className="mt-1.5 text-xs text-red-400 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {errors.title}
+                  </p>
+                )}
+              </motion.div>
 
-                  {/* ── Title ── */}
-                  <motion.div variants={fadeInUp}>
-                    <label htmlFor="title" className={labelCls}>
-                      <FileText className="inline w-4 h-4 mr-1.5 opacity-70" />
-                      Expense Title
-                    </label>
-                    <input
-                      id="title"
-                      name="title"
-                      type="text"
-                      value={form.title}
-                      onChange={handleChange}
-                      placeholder="e.g. Grocery run at Whole Foods"
-                      className={inputCls}
-                      maxLength={200}
-                    />
-                    {errors.title && (
-                      <p className="mt-1.5 text-sm text-[var(--destructive)] flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        {errors.title}
-                      </p>
-                    )}
-                  </motion.div>
-
-                  {/* ── Amount + Currency ── */}
-                  <motion.div variants={fadeInUp}>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="col-span-2">
-                        <label htmlFor="amount" className={labelCls}>
-                          <DollarSign className="inline w-4 h-4 mr-1.5 opacity-70" />
-                          Amount
-                        </label>
-                        <input
-                          id="amount"
-                          name="amount"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={form.amount}
-                          onChange={handleChange}
-                          placeholder="0.00"
-                          className={inputCls}
-                        />
-                        {errors.amount && (
-                          <p className="mt-1.5 text-sm text-[var(--destructive)] flex items-center gap-1">
-                            <AlertCircle className="w-3.5 h-3.5" />
-                            {errors.amount}
-                          </p>
-                        )}
-                      </div>
-                      <div>
-                        <label htmlFor="currency" className={labelCls}>
-                          Currency
-                        </label>
-                        <select
-                          id="currency"
-                          name="currency"
-                          value={form.currency}
-                          onChange={handleChange}
-                          className={inputCls}
-                        >
-                          {CURRENCIES.map((c) => (
-                            <option key={c.code} value={c.code}>
-                              {c.code}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-                  </motion.div>
-
-                  {/* ── Date ── */}
-                  <motion.div variants={fadeInUp}>
-                    <label htmlFor="expense_date" className={labelCls}>
-                      <Calendar className="inline w-4 h-4 mr-1.5 opacity-70" />
-                      Date
-                    </label>
-                    <input
-                      id="expense_date"
-                      name="expense_date"
-                      type="date"
-                      value={form.expense_date}
-                      onChange={handleChange}
-                      className={inputCls}
-                    />
-                    {errors.expense_date && (
-                      <p className="mt-1.5 text-sm text-[var(--destructive)] flex items-center gap-1">
-                        <AlertCircle className="w-3.5 h-3.5" />
-                        {errors.expense_date}
-                      </p>
-                    )}
-                  </motion.div>
-
-                  {/* ── Notes ── */}
-                  <motion.div variants={fadeInUp}>
-                    <label htmlFor="notes" className={labelCls}>
-                      Notes
-                      <span className="ml-1 text-[var(--muted-foreground)] font-normal">(optional)</span>
-                    </label>
-                    <textarea
-                      id="notes"
-                      name="notes"
-                      rows={3}
-                      value={form.notes}
-                      onChange={handleChange}
-                      placeholder="Any additional details..."
-                      className={`${inputCls} resize-none`}
-                    />
-                  </motion.div>
-
-                  {/* ── Error message ── */}
-                  {submitStatus === "error" && submitMessage && (
-                    <motion.div
-                      variants={fadeInUp}
-                      className="flex items-center gap-2 rounded-xl border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)]"
-                    >
-                      <AlertCircle className="w-4 h-4 shrink-0" />
-                      {submitMessage}
-                    </motion.div>
-                  )}
-
-                  {/* ── Action Buttons ── */}
-                  <motion.div
-                    variants={fadeInUp}
-                    className="flex items-center justify-between gap-3 pt-2"
-                  >
-                    {/* Delete (edit mode only) */}
-                    {isEditing && (
-                      <div className="flex items-center gap-2">
-                        {showDeleteConfirm ? (
-                          <>
-                            <span className="text-sm text-[var(--muted-foreground)]">
-                              Are you sure?
-                            </span>
-                            <button
-                              type="button"
-                              onClick={handleDelete}
-                              disabled={deleting}
-                              className="inline-flex items-center gap-1.5 rounded-xl bg-[var(--destructive)] px-4 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 disabled:opacity-60"
-                            >
-                              {deleting ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <Trash2 className="w-4 h-4" />
-                              )}
-                              {deleting ? "Deleting..." : "Confirm"}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setShowDeleteConfirm(false)}
-                              className="rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors duration-200"
-                            >
-                              Cancel
-                            </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => setShowDeleteConfirm(true)}
-                            className="inline-flex items-center gap-1.5 rounded-xl border border-[var(--destructive)]/40 bg-[var(--destructive)]/10 px-4 py-2.5 text-sm font-medium text-[var(--destructive)] hover:bg-[var(--destructive)]/20 transition-all duration-200"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Right side: Cancel + Save */}
-                    <div className="flex items-center gap-3 ml-auto">
-                      <Link
-                        href="/expenses"
-                        className="rounded-xl border border-[var(--border)] px-5 py-2.5 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)]/40 transition-all duration-200"
-                      >
-                        Cancel
-                      </Link>
-                      <button
-                        type="button"
-                        onClick={handleSave}
-                        disabled={saving}
-                        className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[var(--primary)]/90 transition-all duration-200 disabled:opacity-60 shadow-[0_0_16px_rgba(99,102,241,0.3)] hover:shadow-[0_0_24px_rgba(99,102,241,0.45)]"
-                      >
-                        {saving ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Save className="w-4 h-4" />
-                        )}
-                        {saving
-                          ? "Saving..."
-                          : isEditing
-                          ? "Update Expense"
-                          : "Save Expense"}
-                      </button>
-                    </div>
-                  </motion.div>
-                </motion.div>
-              )}
-            </div>
-          </Reveal>
-
-          {/* ── Tips card ── */}
-          <Reveal delay={0.25}>
-            <div className="mt-6 glass rounded-xl border border-[var(--border)] p-5">
-              <h3 className="text-sm font-semibold text-[var(--foreground)] mb-3">Quick tips</h3>
-              <ul className="space-y-2">
-                {[
-                  "Pick the category that best matches your purchase for accurate reports.",
-                  "Use the notes field to add merchant names, receipt numbers, or context.",
-                  "Log expenses the same day to keep your records accurate.",
-                ].map((tip, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-[var(--muted-foreground)]">
-                    <span className="mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-[var(--primary)]/20 text-[var(--primary)] text-[10px] font-bold">
-                      {i + 1}
+              {/* Amount + Currency */}
+              <motion.div variants={fadeInUp} className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="amount" className={labelCls}>
+                    <span className="flex items-center gap-2">
+                      <DollarSign className="h-4 w-4 text-[var(--primary)]" />
+                      Amount
                     </span>
-                    {tip}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-    </div>
-  );
-}
+                  </label>
+                  <input
+                    id="amount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.amount}
+                    onChange={(e) => setField("amount", e.target.value)}
+                    placeholder="0.00"
+                    className={inputCls}
+                  />
+                  {errors.amount && (
+                    <p className="mt-1.5 text-xs text-red-400 flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3" />
+                      {errors.amount}
+                    </p>
+                  )}
+                </div>
 
-// ─── Suspense wrapper (required for useSearchParams in App Router) ─────────────
+                <div>
+                  <label htmlFor="currency" className={labelCls}>
+                    Currency
+                  </label>
+                  <select
+                    id="currency"
+                    value={form.currency}
+                    onChange={(e) => setField("currency", e.target.value)}
+                    className={inputCls}
+                  >
+                    {CURRENCIES.map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.symbol} {c.code} — {c.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </motion.div>
 
-function LoadingFallback() {
-  return (
-    <div
-      className="min-h-screen flex items-center justify-center"
-      style={{ background: "var(--background)" }}
-    >
-      <div className="flex flex-col items-center gap-4">
-        <Loader2 className="w-10 h-10 text-[var(--primary)] animate-spin" />
-        <p className="text-[var(--muted-foreground)] text-sm">Loading...</p>
+              {/* Category */}
+              <motion.div variants={fadeInUp}>
+                <label className={labelCls}>
+                  <span className="flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-[var(--primary)]" />
+                    Category
+                  </span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {categories.map((cat) => {
+                    const isSelected = form.category_id === cat.id;
+                    return (
+                      <button
+                        key={cat.id}
+                        type="button"
+                        onClick={() => setField("category_id", cat.id)}
+                        className={`flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium border transition-all duration-200 ${
+                          isSelected
+                            ? "border-[var(--primary)] bg-[var(--primary)]/15 text-[var(--foreground)]"
+                            : "border-[var(--border)] bg-[var(--card)] text-[var(--muted-foreground)] hover:border-[var(--primary)]/50 hover:text-[var(--foreground)]"
+                        }`}
+                        style={isSelected ? { boxShadow: `0 0 0 1px var(--primary)` } : {}}
+                      >
+                        <span>{cat.icon ?? "📦"}</span>
+                        <span className="truncate">{cat.name}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {errors.category_id && (
+                  <p className="mt-1.5 text-xs text-red-400 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {errors.category_id}
+                  </p>
+                )}
+              </motion.div>
+
+              {/* Date */}
+              <motion.div variants={fadeInUp}>
+                <label htmlFor="expense_date" className={labelCls}>
+                  <span className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-[var(--primary)]" />
+                    Date
+                  </span>
+                </label>
+                <input
+                  id="expense_date"
+                  type="date"
+                  value={form.expense_date}
+                  onChange={(e) => setField("expense_date", e.target.value)}
+                  className={inputCls}
+                  max={getTodayString()}
+                />
+                {errors.expense_date && (
+                  <p className="mt-1.5 text-xs text-red-400 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {errors.expense_date}
+                  </p>
+                )}
+              </motion.div>
+
+              {/* Notes */}
+              <motion.div variants={fadeInUp}>
+                <label htmlFor="notes" className={labelCls}>
+                  Notes
+                  <span className="ml-1 text-xs text-[var(--muted-foreground)] font-normal">
+                    (optional)
+                  </span>
+                </label>
+                <textarea
+                  id="notes"
+                  value={form.notes}
+                  onChange={(e) => setField("notes", e.target.value)}
+                  placeholder="Any additional details..."
+                  rows={3}
+                  className={`${inputCls} resize-none`}
+                  maxLength={500}
+                />
+              </motion.div>
+
+              {/* Actions */}
+              <motion.div
+                variants={fadeInUp}
+                className="flex items-center justify-between gap-4 pt-2"
+              >
+                {isEditing ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeleteConfirm(true)}
+                    disabled={deleting || saving}
+                    className="inline-flex items-center gap-2 rounded-xl border border-red-800/50 bg-red-950/40 px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-950/70 transition-all duration-200 disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete
+                  </button>
+                ) : (
+                  <div />
+                )}
+
+                <button
+                  type="submit"
+                  disabled={saving || deleting}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all duration-200 disabled:opacity-50 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+                >
+                  {saving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {saving
+                    ? "Saving..."
+                    : isEditing
+                    ? "Update Expense"
+                    : "Add Expense"}
+                </button>
+              </motion.div>
+            </motion.div>
+          </form>
+        </Reveal>
+
+        {/* Delete confirmation modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <div
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setShowDeleteConfirm(false)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.94, y: 12 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              className="relative glass rounded-2xl p-6 max-w-sm w-full shadow-2xl"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-950/60 border border-red-800/50">
+                  <Trash2 className="h-5 w-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-[var(--foreground)]">Delete Expense</h3>
+                  <p className="text-xs text-[var(--muted-foreground)]">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-sm text-[var(--muted-foreground)] mb-6">
+                Are you sure you want to delete this expense? It will be permanently removed.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                  className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-medium text-[var(--foreground)] hover:bg-[var(--border)] transition-all duration-200 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition-all duration-200 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+                >
+                  {deleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                  {deleting ? "Deleting..." : "Delete"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
+// ─── Page export (wraps inner in Suspense for useSearchParams) ────────────────
+
 export default function AddEditExpensePage() {
   return (
-    <Suspense fallback={<LoadingFallback />}>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--primary)]" />
+        </div>
+      }
+    >
       <AddEditExpenseInner />
     </Suspense>
   );

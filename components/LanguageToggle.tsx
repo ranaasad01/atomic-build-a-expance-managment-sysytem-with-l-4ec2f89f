@@ -1,24 +1,32 @@
-"use client";
-
-import { useSiteLocale } from "@/components/LocaleProvider";
-
-const LABELS: Record<string, string> = { en: "EN", es: "ES", fr: "FR", de: "DE", pt: "PT" };
+'use client';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
 
 export default function LanguageToggle() {
-  const { locale, setLocale, locales } = useSiteLocale();
-  if (locales.length < 2) return null;
+  const [locale, setLocale] = useState('en');
+
+  useEffect(() => {
+    const stored = localStorage.getItem('locale') ?? 'en';
+    setLocale(stored);
+  }, []);
+
+  const toggle = () => {
+    const next = locale === 'en' ? 'es' : 'en';
+    localStorage.setItem('locale', next);
+    setLocale(next);
+    window.location.reload();
+  };
+
   return (
-    <div className="fixed bottom-5 left-5 z-50 flex gap-1 rounded-full border border-gray-200 bg-white/90 px-1 py-1 shadow-lg backdrop-blur">
-      {locales.map((l) => (
-        <button
-          key={l}
-          type="button"
-          onClick={() => setLocale(l)}
-          className={"rounded-full px-2.5 py-1 text-xs font-semibold transition-colors " + (locale === l ? "bg-black text-white" : "text-gray-700 hover:bg-gray-100")}
-        >
-          {LABELS[l] ?? l.toUpperCase()}
-        </button>
-      ))}
-    </div>
+    <motion.button
+      onClick={toggle}
+      whileHover={{ scale: 1.08 }}
+      whileTap={{ scale: 0.95 }}
+      className="fixed bottom-6 right-6 z-50 w-10 h-10 rounded-full flex items-center justify-center text-xs font-bold shadow-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] hover:border-[var(--primary)] transition-colors duration-200"
+      aria-label="Toggle language"
+      title={locale === 'en' ? 'Switch to Spanish' : 'Switch to English'}
+    >
+      {locale === 'en' ? 'ES' : 'EN'}
+    </motion.button>
   );
 }

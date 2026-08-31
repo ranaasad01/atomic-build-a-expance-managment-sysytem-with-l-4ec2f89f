@@ -1,1061 +1,906 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import Link from "next/link";
 import { Reveal } from "@/components/Reveal";
-import { EXPENSE_CATEGORIES } from "@/lib/data";
-import { fadeInUp, staggerContainer, scaleIn } from "@/lib/motion";
-import { RefreshCw, Plus, Edit, Trash2, Calendar, Clock, ToggleLeft, ToggleRight, AlertCircle, Check, X, ArrowLeft, Zap } from 'lucide-react';
+import { fadeInUp, staggerContainer } from "@/lib/motion";
+import { EXPENSE_CATEGORIES, CURRENCIES } from "@/lib/data";
+import { createClient } from "@/lib/supabase/client";
+import { RefreshCw, Plus, Edit, Trash2, AlertCircle, Calendar, Check, X, Loader2 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type Frequency = "Daily" | "Weekly" | "Monthly";
-type Currency = "USD" | "EUR" | "GBP";
-
 interface RecurringExpense {
   id: string;
+  user_id: string;
   title: string;
   amount: number;
-  currency: Currency;
-  category: string;
-  frequency: Frequency;
-  nextDue: string; // ISO date string
-  autoCreate: boolean;
+  currency: string;
+  category_id: string | null;
+  frequency: string;
+  start_date: string;
+  next_due_date: string | null;
+  auto_create: boolean;
   active: boolean;
-  notes?: string;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 interface FormState {
   title: string;
   amount: string;
-  currency: Currency;
-  category: string;
-  frequency: Frequency;
-  startDate: string;
-  autoCreate: boolean;
+  currency: string;
+  category_id: string;
+  frequency: string;
+  start_date: string;
+  auto_create: boolean;
   notes: string;
+}
+
+interface FormErrors {
+  title?: string;
+  amount?: string;
+  start_date?: string;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function getNextMonthFirst(): string {
-  const now = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-  return next.toISOString().split("T")[0];
-}
-
-function getNextMonth15(): string {
-  const now = new Date();
-  const next = new Date(now.getFullYear(), now.getMonth() + 1, 15);
-  return next.toISOString().split("T")[0];
-}
-
-function formatDate(iso: string): string {
-  const d = new Date(iso + "T00:00:00");
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-}
-
-function formatCurrency(amount: number, currency: string): string {
+function formatCurrency(amount: number, currency = "USD"): string {
   try {
-    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(amount);
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+    }).format(amount ?? 0);
   } catch {
-    return `$${amount.toFixed(2)}`;
+    return `$${(amount ?? 0).toFixed(2)}`;
   }
 }
 
-function getCategoryMeta(name: string) {
-  return (
-    EXPENSE_CATEGORIES.find(
-      (c) => c.name.toLowerCase() === name.toLowerCase() ||
-             c.name.toLowerCase().includes(name.toLowerCase()) ||
-             name.toLowerCase().includes(c.name.toLowerCase().split(" ")[0])
-    ) ?? EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1]
-  );
-}
-
-function frequencyColor(freq: Frequency): string {
-  switch (freq) {
-    case "Daily": return "#10B981";
-    case "Weekly": return "#6366F1";
-    case "Monthly": return "#F59E0B";
+function formatDate(dateStr: string | null | undefined): string {
+  if (!dateStr) return "—";
+  try {
+    return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+    });
+  } catch {
+    return dateStr;
   }
 }
 
-function generateUpcoming(templates: RecurringExpense[]): Array<RecurringExpense & { dueDate: string }> {
-  const active = templates.filter((t) => t.active);
-  const results: Array<RecurringExpense & { dueDate: string }> = [];
-
-  for (const t of active) {
-    results.push({ ...t, dueDate: t.nextDue });
-  }
-
-  return results
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
-    .slice(0, 5);
+function getTodayString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
 }
 
-// ─── Sample data ──────────────────────────────────────────────────────────────
+function calcMonthlyCost(items: RecurringExpense[]): number {
+  return items
+    .filter((r) => r.active)
+    .reduce((sum, r) => {
+      const amt = r.amount ?? 0;
+      if (r.frequency === "weekly") return sum + amt * 4.33;
+      if (r.frequency === "yearly") return sum + amt / 12;
+      return sum + amt; // monthly
+    }, 0);
+}
 
-const SAMPLE_RECURRING: RecurringExpense[] = [
-  {
-    id: "r1",
-    title: "Netflix",
-    amount: 15.99,
-    currency: "USD",
-    category: "Entertainment",
-    frequency: "Monthly",
-    nextDue: getNextMonthFirst(),
-    autoCreate: true,
-    active: true,
-    notes: "Standard HD plan",
-  },
-  {
-    id: "r2",
-    title: "Rent",
-    amount: 1200,
-    currency: "USD",
-    category: "Bills",
-    frequency: "Monthly",
-    nextDue: getNextMonthFirst(),
-    autoCreate: false,
-    active: true,
-    notes: "Monthly apartment rent",
-  },
-  {
-    id: "r3",
-    title: "Gym Membership",
-    amount: 49.99,
-    currency: "USD",
-    category: "Health",
-    frequency: "Monthly",
-    nextDue: getNextMonth15(),
-    autoCreate: true,
-    active: false,
-    notes: "Paused for summer",
-  },
+function getNextDue(items: RecurringExpense[]): string {
+  const active = items
+    .filter((r) => r.active && r.next_due_date)
+    .sort((a, b) =>
+      (a.next_due_date ?? "").localeCompare(b.next_due_date ?? "")
+    );
+  return active.length > 0 ? formatDate(active[0].next_due_date) : "—";
+}
+
+const FREQUENCIES = [
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+  { value: "yearly", label: "Yearly" },
 ];
 
-const EMPTY_FORM: FormState = {
+const DEFAULT_FORM: FormState = {
   title: "",
   amount: "",
   currency: "USD",
-  category: "",
-  frequency: "Monthly",
-  startDate: "",
-  autoCreate: false,
+  category_id: "",
+  frequency: "monthly",
+  start_date: "",
+  auto_create: false,
   notes: "",
 };
 
-// ─── Modal variants ───────────────────────────────────────────────────────────
+const inputCls =
+  "w-full bg-[var(--background)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--foreground)] placeholder-[var(--muted-foreground)] focus:border-[var(--primary)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)] transition-colors duration-200 text-sm";
 
-const overlayVariants = {
-  hidden: { opacity: 0 },
-  visible: { opacity: 1, transition: { duration: 0.2 } },
-  exit: { opacity: 0, transition: { duration: 0.18 } },
-};
+const labelCls = "block text-sm font-medium text-[var(--foreground)] mb-1.5";
 
-const modalVariants = {
-  hidden: { opacity: 0, scale: 0.94, y: 16 },
-  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
-  exit: { opacity: 0, scale: 0.94, y: 16, transition: { duration: 0.18, ease: "easeIn" } },
-};
+// ─── Category Badge ───────────────────────────────────────────────────────────
 
-const cardVariants = {
-  hidden: { opacity: 0, y: 20 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.45, ease: "easeOut" } },
-};
-
-// ─── Sub-components ───────────────────────────────────────────────────────────
-
-function FrequencyBadge({ freq }: { freq: Frequency }) {
-  const color = frequencyColor(freq);
+function CategoryBadge({ categoryId }: { categoryId: string | null }) {
+  const cat = EXPENSE_CATEGORIES.find((c) => c.name === categoryId) ?? EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold"
-      style={{ backgroundColor: color + "22", color, border: `1px solid ${color}44` }}
-    >
-      <Clock className="w-3 h-3" />
-      {freq}
-    </span>
-  );
-}
-
-function CategoryBadge({ category }: { category: string }) {
-  const meta = getCategoryMeta(category);
-  return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium"
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium"
       style={{
-        backgroundColor: meta.color + "22",
-        color: meta.color,
-        border: `1px solid ${meta.color}44`,
+        backgroundColor: cat.color + "22",
+        color: cat.color,
+        border: `1px solid ${cat.color}44`,
       }}
     >
-      <span>{meta.icon}</span>
-      {category}
+      <span>{cat.icon}</span>
+      {cat.name}
     </span>
   );
 }
 
-// ─── Page ────────────────────────────────────────────────────────────────────
+// ─── Frequency Badge ──────────────────────────────────────────────────────────
+
+function FrequencyBadge({ frequency }: { frequency: string }) {
+  const colors: Record<string, string> = {
+    weekly: "#6366F1",
+    monthly: "#10B981",
+    yearly: "#F59E0B",
+  };
+  const color = colors[frequency] ?? "#94A3B8";
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize"
+      style={{
+        backgroundColor: color + "22",
+        color,
+        border: `1px solid ${color}44`,
+      }}
+    >
+      <RefreshCw className="w-3 h-3" />
+      {frequency}
+    </span>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function RecurringPage() {
-  const [templates, setTemplates] = useState<RecurringExpense[]>(SAMPLE_RECURRING);
-  const [showForm, setShowForm] = useState(false);
+  const [items, setItems] = useState<RecurringExpense[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Modal state
+  const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [form, setForm] = useState<FormState>(EMPTY_FORM);
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormState, string>>>({});
-  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
+  const [form, setForm] = useState<FormState>({ ...DEFAULT_FORM });
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  // Delete state
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // Toggle loading
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  const supabase = createClient();
+
+  // ── Fetch ────────────────────────────────────────────────────────────────────
+
+  async function fetchItems() {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        setError("You must be signed in to view recurring expenses.");
+        setLoading(false);
+        return;
+      }
+      const { data, error: fetchError } = await supabase
+        .from("recurring_expenses")
+        .select("*")
+        .eq("user_id", userData.user.id)
+        .order("created_at", { ascending: false });
+
+      if (fetchError) {
+        setError(fetchError.message);
+      } else {
+        setItems((data as RecurringExpense[]) ?? []);
+      }
+    } catch (err) {
+      setError("Failed to load recurring expenses.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   useEffect(() => {
-    setMounted(true);
-    // Initialize startDate after mount to avoid hydration mismatch
-    setForm((prev) => ({
-      ...prev,
-      startDate: new Date().toISOString().split("T")[0],
-    }));
+    fetchItems();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const upcoming = generateUpcoming(templates);
+  // ── Form helpers ─────────────────────────────────────────────────────────────
 
-  const openAdd = useCallback(() => {
+  function openAdd() {
     setEditingId(null);
+    setForm({ ...DEFAULT_FORM, start_date: getTodayString() });
+    setFormErrors({});
+    setSaveError(null);
+    setShowModal(true);
+  }
+
+  function openEdit(item: RecurringExpense) {
+    setEditingId(item.id);
     setForm({
-      ...EMPTY_FORM,
-      startDate: mounted ? new Date().toISOString().split("T")[0] : "",
+      title: item.title ?? "",
+      amount: String(item.amount ?? ""),
+      currency: item.currency ?? "USD",
+      category_id: item.category_id ?? "",
+      frequency: item.frequency ?? "monthly",
+      start_date: item.start_date ?? getTodayString(),
+      auto_create: item.auto_create ?? false,
+      notes: item.notes ?? "",
     });
     setFormErrors({});
-    setShowForm(true);
-  }, [mounted]);
+    setSaveError(null);
+    setShowModal(true);
+  }
 
-  const openEdit = useCallback((t: RecurringExpense) => {
-    setEditingId(t.id);
-    setForm({
-      title: t.title,
-      amount: t.amount.toString(),
-      currency: t.currency,
-      category: t.category,
-      frequency: t.frequency,
-      startDate: t.nextDue,
-      autoCreate: t.autoCreate,
-      notes: t.notes ?? "",
-    });
-    setFormErrors({});
-    setShowForm(true);
-  }, []);
-
-  const closeForm = useCallback(() => {
-    setShowForm(false);
+  function closeModal() {
+    setShowModal(false);
     setEditingId(null);
-    setFormErrors({});
-  }, []);
+    setSaveError(null);
+  }
 
-  const validate = (): boolean => {
-    const errors: Partial<Record<keyof FormState, string>> = {};
-    if (!form.title.trim()) errors.title = "Title is required";
-    if (!form.amount || isNaN(parseFloat(form.amount)) || parseFloat(form.amount) <= 0)
-      errors.amount = "Enter a valid positive amount";
-    if (!form.category) errors.category = "Please select a category";
-    if (!form.startDate) errors.startDate = "Start date is required";
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
+  function validateForm(): boolean {
+    const errs: FormErrors = {};
+    if (!form.title.trim()) errs.title = "Title is required.";
+    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0)
+      errs.amount = "Enter a valid amount greater than 0.";
+    if (!form.start_date) errs.start_date = "Start date is required.";
+    setFormErrors(errs);
+    return Object.keys(errs).length === 0;
+  }
 
-  const handleSave = useCallback(() => {
-    if (!validate()) return;
+  async function handleSave() {
+    if (!validateForm()) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        setSaveError("You must be signed in.");
+        setSaving(false);
+        return;
+      }
 
-    if (editingId) {
-      setTemplates((prev) =>
-        prev.map((t) =>
-          t.id === editingId
-            ? {
-                ...t,
-                title: form.title.trim(),
-                amount: parseFloat(form.amount),
-                currency: form.currency,
-                category: form.category,
-                frequency: form.frequency,
-                nextDue: form.startDate,
-                autoCreate: form.autoCreate,
-                notes: form.notes,
-              }
-            : t
-        )
-      );
-    } else {
-      const newTemplate: RecurringExpense = {
-        id: `r${Date.now()}`,
+      const payload = {
+        user_id: userData.user.id,
         title: form.title.trim(),
         amount: parseFloat(form.amount),
         currency: form.currency,
-        category: form.category,
+        category_id: form.category_id || null,
         frequency: form.frequency,
-        nextDue: form.startDate,
-        autoCreate: form.autoCreate,
-        active: true,
-        notes: form.notes,
+        start_date: form.start_date,
+        auto_create: form.auto_create,
+        notes: form.notes.trim() || null,
+        updated_at: new Date().toISOString(),
       };
-      setTemplates((prev) => [...prev, newTemplate]);
+
+      if (editingId) {
+        const { error: updateError } = await supabase
+          .from("recurring_expenses")
+          .update(payload)
+          .eq("id", editingId);
+        if (updateError) throw new Error(updateError.message);
+      } else {
+        const { error: insertError } = await supabase
+          .from("recurring_expenses")
+          .insert({ ...payload, active: true });
+        if (insertError) throw new Error(insertError.message);
+      }
+
+      closeModal();
+      await fetchItems();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save.");
+    } finally {
+      setSaving(false);
     }
-    closeForm();
-  }, [form, editingId, closeForm]);
+  }
 
-  const handleDelete = useCallback((id: string) => {
-    setTemplates((prev) => prev.filter((t) => t.id !== id));
-    setDeleteConfirmId(null);
-  }, []);
+  // ── Toggle active ─────────────────────────────────────────────────────────────
 
-  const toggleActive = useCallback((id: string) => {
-    setTemplates((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, active: !t.active } : t))
-    );
-  }, []);
+  async function handleToggleActive(item: RecurringExpense) {
+    setTogglingId(item.id);
+    try {
+      const { error: toggleError } = await supabase
+        .from("recurring_expenses")
+        .update({ active: !item.active, updated_at: new Date().toISOString() })
+        .eq("id", item.id);
+      if (!toggleError) {
+        setItems((prev) =>
+          prev.map((r) =>
+            r.id === item.id ? { ...r, active: !r.active } : r
+          )
+        );
+      }
+    } catch {
+      // silently fail toggle
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
-  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) => {
-    setForm((prev) => ({ ...prev, [key]: value }));
-    if (formErrors[key]) setFormErrors((prev) => ({ ...prev, [key]: undefined }));
-  };
+  // ── Delete ────────────────────────────────────────────────────────────────────
+
+  async function handleDelete() {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      const { error: deleteError } = await supabase
+        .from("recurring_expenses")
+        .delete()
+        .eq("id", deleteId);
+      if (!deleteError) {
+        setItems((prev) => prev.filter((r) => r.id !== deleteId));
+        setDeleteId(null);
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  // ── Derived stats ─────────────────────────────────────────────────────────────
+
+  const totalActive = items.filter((r) => r.active).length;
+  const monthlyCost = calcMonthlyCost(items);
+  const nextDue = getNextDue(items);
+
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <div
-      className="min-h-screen"
-      style={{ background: "var(--background)", color: "var(--foreground)" }}
+      className="min-h-screen mesh-bg"
+      style={{ background: "var(--background)" }}
     >
-      {/* ── HERO ── */}
-      <section className="relative overflow-hidden mesh-bg pt-24 pb-16">
-        {/* Glow orb */}
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute -top-32 left-1/2 -translate-x-1/2 w-[700px] h-[400px] rounded-full"
-          style={{
-            background:
-              "radial-gradient(ellipse at center, rgba(99,102,241,0.18) 0%, transparent 70%)",
-          }}
-        />
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Back link */}
-          <Reveal>
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center gap-2 text-sm mb-8 transition-colors duration-200"
-              style={{ color: "var(--muted-foreground)" }}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 pt-24">
+        {/* ── Header ── */}
+        <Reveal>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <RefreshCw className="w-5 h-5 text-[var(--primary)]" />
+                <h1 className="text-2xl font-bold tracking-tight text-[var(--foreground)]">
+                  Recurring Expenses
+                </h1>
+              </div>
+              <p className="text-sm text-[var(--muted-foreground)]">
+                Manage your subscriptions and repeating bills in one place.
+              </p>
+            </div>
+            <button
+              onClick={openAdd}
+              className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_0_16px_rgba(99,102,241,0.3)] hover:opacity-90 transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
             >
-              <ArrowLeft className="w-4 h-4" />
-              Back to Dashboard
-            </Link>
-          </Reveal>
+              <Plus className="w-4 h-4" />
+              Add Recurring
+            </button>
+          </div>
+        </Reveal>
 
+        {/* ── Summary Cards ── */}
+        <Reveal delay={0.05}>
           <motion.div
             variants={staggerContainer}
             initial="hidden"
             animate="visible"
-            className="max-w-3xl"
+            className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8"
           >
-            {/* Badge */}
-            <motion.div variants={fadeInUp} className="mb-5">
-              <span
-                className="inline-flex items-center gap-2 rounded-full px-4 py-1.5 text-xs font-semibold tracking-wide uppercase"
-                style={{
-                  background: "rgba(99,102,241,0.15)",
-                  color: "var(--primary)",
-                  border: "1px solid rgba(99,102,241,0.3)",
-                }}
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Recurring Expenses
-              </span>
+            {/* Total Active */}
+            <motion.div
+              variants={fadeInUp}
+              className="glass rounded-2xl p-5 border border-[var(--border)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]"
+            >
+              <p className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-1">
+                Total Active
+              </p>
+              <p className="text-3xl font-bold text-[var(--foreground)]">
+                {totalActive}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                recurring expenses
+              </p>
             </motion.div>
 
-            {/* Heading */}
-            <motion.h1
+            {/* Monthly Cost */}
+            <motion.div
               variants={fadeInUp}
-              className="text-4xl sm:text-5xl font-bold tracking-tight mb-4"
-              style={{ color: "var(--foreground)" }}
+              className="glass rounded-2xl p-5 border border-[var(--border)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]"
             >
-              Automate Your{" "}
-              <span style={{ color: "var(--primary)" }}>Regular Expenses</span>
-            </motion.h1>
+              <p className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-1">
+                Monthly Cost
+              </p>
+              <p className="text-3xl font-bold text-[var(--accent)]">
+                {formatCurrency(monthlyCost)}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                estimated per month
+              </p>
+            </motion.div>
 
-            {/* Subtitle */}
-            <motion.p
+            {/* Next Due */}
+            <motion.div
               variants={fadeInUp}
-              className="text-lg leading-relaxed mb-8 max-w-2xl"
-              style={{ color: "var(--muted-foreground)" }}
+              className="glass rounded-2xl p-5 border border-[var(--border)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]"
             >
-              Manage subscriptions, rent, utilities, and any recurring cost in one place.
-              Set frequencies, toggle auto-creation, and never miss a scheduled entry again.
-            </motion.p>
-
-            {/* CTA */}
-            <motion.div variants={fadeInUp} className="flex flex-wrap items-center gap-4">
-              <button
-                onClick={openAdd}
-                className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 hover:shadow-lg"
-                style={{
-                  background: "var(--primary)",
-                  boxShadow: "0 0 24px rgba(99,102,241,0.35)",
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                Add Recurring
-              </button>
-
-              {/* Info note */}
-              <span
-                className="inline-flex items-center gap-1.5 text-xs rounded-lg px-3 py-2"
-                style={{
-                  background: "rgba(245,158,11,0.1)",
-                  color: "var(--accent)",
-                  border: "1px solid rgba(245,158,11,0.25)",
-                }}
-              >
-                <Zap className="w-3.5 h-3.5" />
-                Recurring templates are stored locally — Supabase sync coming soon
-              </span>
+              <p className="text-xs font-medium text-[var(--muted-foreground)] uppercase tracking-wide mb-1">
+                Next Due
+              </p>
+              <p className="text-2xl font-bold text-[var(--foreground)] truncate">
+                {nextDue}
+              </p>
+              <p className="text-xs text-[var(--muted-foreground)] mt-1">
+                upcoming payment
+              </p>
             </motion.div>
           </motion.div>
-        </div>
-      </section>
+        </Reveal>
 
-      {/* ── UPCOMING SCHEDULE ── */}
-      <section className="py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        {/* ── Error Banner ── */}
+        {error && (
           <Reveal>
-            <h2
-              className="text-xl font-bold mb-6 flex items-center gap-2"
-              style={{ color: "var(--foreground)" }}
-            >
-              <Calendar className="w-5 h-5" style={{ color: "var(--primary)" }} />
-              Upcoming This Month
-            </h2>
+            <div className="mb-6 flex items-center gap-3 rounded-xl border border-red-800/40 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+              <AlertCircle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
           </Reveal>
+        )}
 
-          <Reveal>
-            <div
-              className="glass rounded-2xl border p-6"
-              style={{ borderColor: "var(--border)" }}
-            >
-              {upcoming.length === 0 ? (
-                <p className="text-sm text-center py-6" style={{ color: "var(--muted-foreground)" }}>
-                  No active recurring expenses scheduled.
+        {/* ── List ── */}
+        <Reveal delay={0.1}>
+          <div className="glass rounded-2xl border border-[var(--border)] overflow-hidden shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]">
+            {loading ? (
+              <div className="flex items-center justify-center py-24">
+                <Loader2 className="w-8 h-8 animate-spin text-[var(--primary)]" />
+              </div>
+            ) : items.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-24 text-center px-6">
+                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-[var(--primary)]/10 text-3xl">
+                  🔄
+                </div>
+                <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">
+                  No recurring expenses yet
+                </h3>
+                <p className="text-sm text-[var(--muted-foreground)] max-w-xs mb-6">
+                  Add subscriptions, rent, or any repeating bill to track them automatically.
                 </p>
-              ) : (
-                <motion.ul
-                  variants={staggerContainer}
-                  initial="hidden"
-                  animate="visible"
-                  className="divide-y"
-                  style={{ borderColor: "var(--border)" }}
+                <button
+                  onClick={openAdd}
+                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition-all duration-200"
                 >
-                  {upcoming.map((item) => {
-                    const meta = getCategoryMeta(item.category);
-                    return (
-                      <motion.li
-                        key={item.id + item.dueDate}
-                        variants={fadeInUp}
-                        className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div
-                            className="w-10 h-10 rounded-xl flex items-center justify-center text-lg flex-shrink-0"
-                            style={{ background: meta.color + "22" }}
-                          >
-                            {meta.icon}
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
-                              {item.title}
-                            </p>
-                            <CategoryBadge category={item.category} />
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-4 flex-shrink-0">
-                          <span
-                            className="text-sm font-bold"
-                            style={{ color: "var(--foreground)" }}
-                          >
-                            {formatCurrency(item.amount, item.currency)}
-                          </span>
-                          <span
-                            className="text-xs rounded-lg px-2.5 py-1"
-                            style={{
-                              background: "rgba(99,102,241,0.12)",
-                              color: "var(--primary)",
-                              border: "1px solid rgba(99,102,241,0.25)",
-                            }}
-                          >
-                            {formatDate(item.dueDate)}
-                          </span>
-                        </div>
-                      </motion.li>
-                    );
-                  })}
-                </motion.ul>
-              )}
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
-      {/* ── TEMPLATES LIST ── */}
-      <section className="py-8 pb-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <Reveal>
-            <div className="flex items-center justify-between mb-8">
-              <h2
-                className="text-xl font-bold flex items-center gap-2"
-                style={{ color: "var(--foreground)" }}
-              >
-                <RefreshCw className="w-5 h-5" style={{ color: "var(--accent)" }} />
-                Your Recurring Templates
-              </h2>
-              <button
-                onClick={openAdd}
-                className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-all duration-200 hover:opacity-90"
-                style={{
-                  background: "rgba(99,102,241,0.15)",
-                  color: "var(--primary)",
-                  border: "1px solid rgba(99,102,241,0.3)",
-                }}
-              >
-                <Plus className="w-4 h-4" />
-                New Template
-              </button>
-            </div>
-          </Reveal>
-
-          {templates.length === 0 ? (
-            /* ── EMPTY STATE ── */
-            <motion.div
-              variants={scaleIn}
-              initial="hidden"
-              animate="visible"
-              className="flex flex-col items-center justify-center py-24 text-center"
-            >
-              <div className="text-6xl mb-6">🔄</div>
-              <h3 className="text-xl font-bold mb-2" style={{ color: "var(--foreground)" }}>
-                No recurring expenses yet
-              </h3>
-              <p className="text-sm mb-8 max-w-xs" style={{ color: "var(--muted-foreground)" }}>
-                Add your first recurring template to automate subscriptions, rent, and utilities.
-              </p>
-              <button
-                onClick={openAdd}
-                className="inline-flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition-all duration-200 hover:opacity-90"
-                style={{ background: "var(--primary)" }}
-              >
-                <Plus className="w-4 h-4" />
-                Add your first recurring expense
-              </button>
-            </motion.div>
-          ) : (
-            <motion.div
-              variants={staggerContainer}
-              initial="hidden"
-              animate="visible"
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-            >
-              {templates.map((t) => {
-                const meta = getCategoryMeta(t.category);
-                const isConfirmingDelete = deleteConfirmId === t.id;
-
-                return (
+                  <Plus className="w-4 h-4" />
+                  Add Recurring
+                </button>
+              </div>
+            ) : (
+              <div className="divide-y divide-[var(--border)]">
+                {items.map((item) => (
                   <motion.div
-                    key={t.id}
-                    variants={cardVariants}
-                    className="glass rounded-2xl border p-6 flex flex-col gap-4 transition-all duration-200 hover:shadow-[0_4px_24px_rgba(99,102,241,0.12)]"
-                    style={{
-                      borderColor: t.active ? "var(--border)" : "rgba(46,46,74,0.5)",
-                      opacity: t.active ? 1 : 0.65,
-                    }}
+                    key={item.id}
+                    variants={fadeInUp}
+                    initial="hidden"
+                    animate="visible"
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 px-5 py-4 hover:bg-white/[0.02] transition-colors duration-150"
                   >
-                    {/* Header row */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-11 h-11 rounded-xl flex items-center justify-center text-xl flex-shrink-0"
-                          style={{ background: meta.color + "22" }}
+                    {/* Left: info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span
+                          className={`text-sm font-semibold ${
+                            item.active
+                              ? "text-[var(--foreground)]"
+                              : "text-[var(--muted-foreground)] line-through"
+                          }`}
                         >
-                          {meta.icon}
-                        </div>
-                        <div>
-                          <p
-                            className="font-bold text-base leading-tight"
-                            style={{ color: "var(--foreground)" }}
-                          >
-                            {t.title}
-                          </p>
-                          <CategoryBadge category={t.category} />
-                        </div>
-                      </div>
-
-                      {/* Auto-create toggle */}
-                      <button
-                        onClick={() => toggleActive(t.id)}
-                        className="flex-shrink-0 transition-colors duration-200"
-                        title={t.active ? "Deactivate" : "Activate"}
-                        aria-label={t.active ? "Deactivate template" : "Activate template"}
-                      >
-                        {t.active ? (
-                          <ToggleRight
-                            className="w-7 h-7"
-                            style={{ color: "var(--primary)" }}
-                          />
-                        ) : (
-                          <ToggleLeft
-                            className="w-7 h-7"
-                            style={{ color: "var(--muted-foreground)" }}
-                          />
+                          {item.title}
+                        </span>
+                        <FrequencyBadge frequency={item.frequency} />
+                        {item.category_id && (
+                          <CategoryBadge categoryId={item.category_id} />
                         )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-[var(--muted-foreground)]">
+                        <span className="flex items-center gap-1">
+                          <Calendar className="w-3 h-3" />
+                          Next: {formatDate(item.next_due_date)}
+                        </span>
+                        {item.auto_create && (
+                          <span className="flex items-center gap-1 text-[var(--primary)]">
+                            <Check className="w-3 h-3" />
+                            Auto-create
+                          </span>
+                        )}
+                        {item.notes && (
+                          <span className="truncate max-w-[200px]">{item.notes}</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Right: amount + actions */}
+                    <div className="flex items-center gap-3 shrink-0">
+                      <span className="text-base font-bold text-[var(--foreground)]">
+                        {formatCurrency(item.amount, item.currency)}
+                      </span>
+
+                      {/* Active toggle */}
+                      <button
+                        onClick={() => handleToggleActive(item)}
+                        disabled={togglingId === item.id}
+                        title={item.active ? "Deactivate" : "Activate"}
+                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+                          item.active
+                            ? "bg-[var(--primary)]"
+                            : "bg-[var(--border)]"
+                        }`}
+                      >
+                        <span
+                          className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                            item.active ? "translate-x-6" : "translate-x-1"
+                          }`}
+                        />
+                      </button>
+
+                      {/* Edit */}
+                      <button
+                        onClick={() => openEdit(item)}
+                        title="Edit"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition-all duration-200"
+                      >
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+
+                      {/* Delete */}
+                      <button
+                        onClick={() => setDeleteId(item.id)}
+                        title="Delete"
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted-foreground)] hover:text-red-400 hover:border-red-800/60 transition-all duration-200"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
-
-                    {/* Amount */}
-                    <div className="flex items-center justify-between">
-                      <span
-                        className="text-2xl font-bold tracking-tight"
-                        style={{ color: "var(--foreground)" }}
-                      >
-                        {formatCurrency(t.amount, t.currency)}
-                      </span>
-                      <FrequencyBadge freq={t.frequency} />
-                    </div>
-
-                    {/* Next due */}
-                    <div
-                      className="flex items-center gap-2 text-xs rounded-lg px-3 py-2"
-                      style={{
-                        background: "rgba(99,102,241,0.08)",
-                        color: "var(--muted-foreground)",
-                        border: "1px solid rgba(99,102,241,0.15)",
-                      }}
-                    >
-                      <Calendar className="w-3.5 h-3.5" style={{ color: "var(--primary)" }} />
-                      <span>Next due:</span>
-                      <span className="font-semibold" style={{ color: "var(--foreground)" }}>
-                        {formatDate(t.nextDue)}
-                      </span>
-                    </div>
-
-                    {/* Auto-create indicator */}
-                    <div className="flex items-center gap-2">
-                      {t.autoCreate ? (
-                        <span
-                          className="inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-0.5"
-                          style={{
-                            background: "rgba(16,185,129,0.12)",
-                            color: "#10B981",
-                            border: "1px solid rgba(16,185,129,0.25)",
-                          }}
-                        >
-                          <Check className="w-3 h-3" />
-                          Auto-create on
-                        </span>
-                      ) : (
-                        <span
-                          className="inline-flex items-center gap-1.5 text-xs rounded-full px-2.5 py-0.5"
-                          style={{
-                            background: "rgba(148,163,184,0.1)",
-                            color: "var(--muted-foreground)",
-                            border: "1px solid rgba(148,163,184,0.2)",
-                          }}
-                        >
-                          <X className="w-3 h-3" />
-                          Auto-create off
-                        </span>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 pt-2 border-t" style={{ borderColor: "var(--border)" }}>
-                      {isConfirmingDelete ? (
-                        <div className="flex items-center gap-2 w-full">
-                          <span className="text-xs flex-1" style={{ color: "var(--muted-foreground)" }}>
-                            Delete this template?
-                          </span>
-                          <button
-                            onClick={() => handleDelete(t.id)}
-                            className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200 hover:opacity-90"
-                            style={{ background: "var(--destructive)", color: "#fff" }}
-                          >
-                            <Check className="w-3 h-3" />
-                            Yes
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId(null)}
-                            className="inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-all duration-200"
-                            style={{
-                              background: "rgba(148,163,184,0.1)",
-                              color: "var(--muted-foreground)",
-                              border: "1px solid rgba(148,163,184,0.2)",
-                            }}
-                          >
-                            <X className="w-3 h-3" />
-                            No
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => openEdit(t)}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200 hover:opacity-90"
-                            style={{
-                              background: "rgba(99,102,241,0.12)",
-                              color: "var(--primary)",
-                              border: "1px solid rgba(99,102,241,0.25)",
-                            }}
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => setDeleteConfirmId(t.id)}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all duration-200 hover:opacity-90"
-                            style={{
-                              background: "rgba(220,38,38,0.1)",
-                              color: "var(--destructive)",
-                              border: "1px solid rgba(220,38,38,0.25)",
-                            }}
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                            Delete
-                          </button>
-                        </>
-                      )}
-                    </div>
                   </motion.div>
-                );
-              })}
-            </motion.div>
-          )}
-        </div>
-      </section>
+                ))}
+              </div>
+            )}
+          </div>
+        </Reveal>
+      </div>
 
-      {/* ── ADD/EDIT MODAL ── */}
+      {/* ── Add/Edit Modal ── */}
       <AnimatePresence>
-        {showForm && (
+        {showModal && (
           <>
             {/* Overlay */}
             <motion.div
-              key="overlay"
-              variants={overlayVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
-              className="fixed inset-0 z-40"
-              style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
-              onClick={closeForm}
+              key="modal-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+              onClick={closeModal}
             />
 
             {/* Modal */}
             <motion.div
-              key="modal"
-              variants={modalVariants}
-              initial="hidden"
-              animate="visible"
-              exit="exit"
+              key="modal-panel"
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
               className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              aria-modal="true"
+              role="dialog"
+              aria-label={editingId ? "Edit recurring expense" : "Add recurring expense"}
             >
               <div
-                className="glass rounded-2xl border w-full max-w-lg max-h-[90vh] overflow-y-auto"
-                style={{ borderColor: "var(--border)" }}
+                className="w-full max-w-lg glass rounded-2xl border border-[var(--border)] shadow-[0_8px_48px_rgba(0,0,0,0.5)] overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
               >
-                {/* Modal header */}
-                <div
-                  className="flex items-center justify-between p-6 border-b"
-                  style={{ borderColor: "var(--border)" }}
-                >
-                  <h3 className="text-lg font-bold" style={{ color: "var(--foreground)" }}>
+                {/* Modal Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
+                  <h2 className="text-base font-semibold text-[var(--foreground)]">
                     {editingId ? "Edit Recurring Expense" : "Add Recurring Expense"}
-                  </h3>
+                  </h2>
                   <button
-                    onClick={closeForm}
-                    className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors duration-200 hover:bg-white/5"
-                    style={{ color: "var(--muted-foreground)" }}
-                    aria-label="Close form"
+                    onClick={closeModal}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-all duration-200"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
 
-                {/* Form body */}
-                <div className="p-6 space-y-5">
+                {/* Modal Body */}
+                <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                  {saveError && (
+                    <div className="flex items-center gap-2 rounded-xl border border-red-800/40 bg-red-950/40 px-4 py-3 text-sm text-red-300">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      {saveError}
+                    </div>
+                  )}
+
                   {/* Title */}
                   <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: "var(--foreground)" }}
-                    >
-                      Title
+                    <label className={labelCls} htmlFor="re-title">
+                      Title <span className="text-red-400">*</span>
                     </label>
                     <input
+                      id="re-title"
                       type="text"
-                      value={form.title}
-                      onChange={(e) => setField("title", e.target.value)}
+                      className={inputCls}
                       placeholder="e.g. Netflix, Rent, Gym"
-                      className="w-full rounded-xl px-4 py-2.5 text-sm outline-none transition-all duration-200 focus:ring-2"
-                      style={{
-                        background: "rgba(255,255,255,0.04)",
-                        border: `1px solid ${formErrors.title ? "var(--destructive)" : "var(--border)"}`,
-                        color: "var(--foreground)",
-                        borderColor: "var(--primary)",
-                      }}
+                      value={form.title}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, title: e.target.value }))
+                      }
                     />
                     {formErrors.title && (
-                      <p className="mt-1 text-xs flex items-center gap-1" style={{ color: "var(--destructive)" }}>
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.title}
-                      </p>
+                      <p className="mt-1 text-xs text-red-400">{formErrors.title}</p>
                     )}
                   </div>
 
                   {/* Amount + Currency */}
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label
-                        className="block text-sm font-medium mb-1.5"
-                        style={{ color: "var(--foreground)" }}
-                      >
-                        Amount
+                      <label className={labelCls} htmlFor="re-amount">
+                        Amount <span className="text-red-400">*</span>
                       </label>
                       <input
+                        id="re-amount"
                         type="number"
                         min="0"
                         step="0.01"
-                        value={form.amount}
-                        onChange={(e) => setField("amount", e.target.value)}
+                        className={inputCls}
                         placeholder="0.00"
-                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none transition-all duration-200"
-                        style={{
-                          background: "rgba(255,255,255,0.04)",
-                          border: `1px solid ${formErrors.amount ? "var(--destructive)" : "var(--border)"}`,
-                          color: "var(--foreground)",
-                        }}
+                        value={form.amount}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, amount: e.target.value }))
+                        }
                       />
                       {formErrors.amount && (
-                        <p className="mt-1 text-xs flex items-center gap-1" style={{ color: "var(--destructive)" }}>
-                          <AlertCircle className="w-3 h-3" />
-                          {formErrors.amount}
-                        </p>
+                        <p className="mt-1 text-xs text-red-400">{formErrors.amount}</p>
                       )}
                     </div>
                     <div>
-                      <label
-                        className="block text-sm font-medium mb-1.5"
-                        style={{ color: "var(--foreground)" }}
-                      >
+                      <label className={labelCls} htmlFor="re-currency">
                         Currency
                       </label>
                       <select
+                        id="re-currency"
+                        className={inputCls}
                         value={form.currency}
-                        onChange={(e) => setField("currency", e.target.value as Currency)}
-                        className="w-full rounded-xl px-4 py-2.5 text-sm outline-none transition-all duration-200"
-                        style={{
-                          background: "rgba(26,26,46,0.95)",
-                          border: "1px solid var(--border)",
-                          color: "var(--foreground)",
-                        }}
+                        onChange={(e) =>
+                          setForm((f) => ({ ...f, currency: e.target.value }))
+                        }
                       >
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="GBP">GBP</option>
+                        {CURRENCIES.map((c) => (
+                          <option key={c.code} value={c.code}>
+                            {c.code} — {c.label}
+                          </option>
+                        ))}
                       </select>
                     </div>
                   </div>
 
                   {/* Category */}
                   <div>
-                    <label
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: "var(--foreground)" }}
-                    >
+                    <label className={labelCls} htmlFor="re-category">
                       Category
                     </label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {EXPENSE_CATEGORIES.map((cat) => {
-                        const selected = form.category === cat.name;
-                        return (
-                          <button
-                            key={cat.name}
-                            type="button"
-                            onClick={() => setField("category", cat.name)}
-                            className="flex flex-col items-center gap-1 rounded-xl p-2.5 text-xs font-medium transition-all duration-200"
-                            style={{
-                              background: selected ? cat.color + "22" : "rgba(255,255,255,0.03)",
-                              border: `1px solid ${selected ? cat.color + "66" : "var(--border)"}`,
-                              color: selected ? cat.color : "var(--muted-foreground)",
-                            }}
-                          >
-                            <span className="text-lg">{cat.icon}</span>
-                            <span className="leading-tight text-center">
-                              {cat.name.split(" ")[0]}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {formErrors.category && (
-                      <p className="mt-1.5 text-xs flex items-center gap-1" style={{ color: "var(--destructive)" }}>
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.category}
-                      </p>
-                    )}
+                    <select
+                      id="re-category"
+                      className={inputCls}
+                      value={form.category_id}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, category_id: e.target.value }))
+                      }
+                    >
+                      <option value="">Select category</option>
+                      {EXPENSE_CATEGORIES.map((c) => (
+                        <option key={c.name} value={c.name}>
+                          {c.icon} {c.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Frequency */}
                   <div>
-                    <label
-                      className="block text-sm font-medium mb-2"
-                      style={{ color: "var(--foreground)" }}
-                    >
+                    <label className={labelCls} htmlFor="re-frequency">
                       Frequency
                     </label>
-                    <div className="flex gap-2">
-                      {(["Daily", "Weekly", "Monthly"] as Frequency[]).map((freq) => {
-                        const selected = form.frequency === freq;
-                        const color = frequencyColor(freq);
-                        return (
-                          <label
-                            key={freq}
-                            className="flex-1 flex items-center justify-center gap-1.5 rounded-xl px-3 py-2.5 text-sm font-medium cursor-pointer transition-all duration-200"
-                            style={{
-                              background: selected ? color + "22" : "rgba(255,255,255,0.03)",
-                              border: `1px solid ${selected ? color + "66" : "var(--border)"}`,
-                              color: selected ? color : "var(--muted-foreground)",
-                            }}
-                          >
-                            <input
-                              type="radio"
-                              name="frequency"
-                              value={freq}
-                              checked={selected}
-                              onChange={() => setField("frequency", freq)}
-                              className="sr-only"
-                            />
-                            {freq}
-                          </label>
-                        );
-                      })}
-                    </div>
+                    <select
+                      id="re-frequency"
+                      className={inputCls}
+                      value={form.frequency}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, frequency: e.target.value }))
+                      }
+                    >
+                      {FREQUENCIES.map((f) => (
+                        <option key={f.value} value={f.value}>
+                          {f.label}
+                        </option>
+                      ))}
+                    </select>
                   </div>
 
                   {/* Start Date */}
                   <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: "var(--foreground)" }}
-                    >
-                      Start Date
+                    <label className={labelCls} htmlFor="re-start-date">
+                      Start Date <span className="text-red-400">*</span>
                     </label>
                     <input
+                      id="re-start-date"
                       type="date"
-                      value={form.startDate}
-                      onChange={(e) => setField("startDate", e.target.value)}
-                      className="w-full rounded-xl px-4 py-2.5 text-sm outline-none transition-all duration-200"
-                      style={{
-                        background: "rgba(255,255,255,0.04)",
-                        border: `1px solid ${formErrors.startDate ? "var(--destructive)" : "var(--border)"}`,
-                        color: "var(--foreground)",
-                        colorScheme: "dark",
-                      }}
+                      className={inputCls}
+                      value={form.start_date}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, start_date: e.target.value }))
+                      }
                     />
-                    {formErrors.startDate && (
-                      <p className="mt-1 text-xs flex items-center gap-1" style={{ color: "var(--destructive)" }}>
-                        <AlertCircle className="w-3 h-3" />
-                        {formErrors.startDate}
-                      </p>
+                    {formErrors.start_date && (
+                      <p className="mt-1 text-xs text-red-400">{formErrors.start_date}</p>
                     )}
                   </div>
 
                   {/* Auto-create toggle */}
-                  <div
-                    className="flex items-center justify-between rounded-xl px-4 py-3"
-                    style={{
-                      background: "rgba(255,255,255,0.03)",
-                      border: "1px solid var(--border)",
-                    }}
-                  >
+                  <div className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--background)] px-4 py-3">
                     <div>
-                      <p className="text-sm font-medium" style={{ color: "var(--foreground)" }}>
+                      <p className="text-sm font-medium text-[var(--foreground)]">
                         Auto-create expense
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: "var(--muted-foreground)" }}>
-                        Automatically log this expense on the due date
+                      <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                        Automatically log this expense when it is due.
                       </p>
                     </div>
                     <button
                       type="button"
-                      onClick={() => setField("autoCreate", !form.autoCreate)}
-                      aria-label="Toggle auto-create"
+                      onClick={() =>
+                        setForm((f) => ({ ...f, auto_create: !f.auto_create }))
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${
+                        form.auto_create
+                          ? "bg-[var(--primary)]"
+                          : "bg-[var(--border)]"
+                      }`}
                     >
-                      {form.autoCreate ? (
-                        <ToggleRight
-                          className="w-8 h-8 transition-colors duration-200"
-                          style={{ color: "var(--primary)" }}
-                        />
-                      ) : (
-                        <ToggleLeft
-                          className="w-8 h-8 transition-colors duration-200"
-                          style={{ color: "var(--muted-foreground)" }}
-                        />
-                      )}
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                          form.auto_create ? "translate-x-6" : "translate-x-1"
+                        }`}
+                      />
                     </button>
                   </div>
 
                   {/* Notes */}
                   <div>
-                    <label
-                      className="block text-sm font-medium mb-1.5"
-                      style={{ color: "var(--foreground)" }}
-                    >
+                    <label className={labelCls} htmlFor="re-notes">
                       Notes
-                      <span className="ml-1 text-xs font-normal" style={{ color: "var(--muted-foreground)" }}>
-                        (optional)
-                      </span>
                     </label>
                     <textarea
+                      id="re-notes"
+                      rows={2}
+                      className={inputCls + " resize-none"}
+                      placeholder="Optional notes..."
                       value={form.notes}
-                      onChange={(e) => setField("notes", e.target.value)}
-                      placeholder="Any additional details..."
-                      rows={3}
-                      className="w-full rounded-xl px-4 py-2.5 text-sm outline-none transition-all duration-200 resize-none"
-                      style={{
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid var(--border)",
-                        color: "var(--foreground)",
-                      }}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, notes: e.target.value }))
+                      }
                     />
                   </div>
                 </div>
 
-                {/* Modal footer */}
-                <div
-                  className="flex items-center gap-3 p-6 border-t"
-                  style={{ borderColor: "var(--border)" }}
-                >
+                {/* Modal Footer */}
+                <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-[var(--border)]">
                   <button
-                    onClick={handleSave}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white transition-all duration-200 hover:opacity-90"
-                    style={{ background: "var(--primary)" }}
+                    onClick={closeModal}
+                    className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition-all duration-200"
                   >
-                    <Check className="w-4 h-4" />
-                    {editingId ? "Save Changes" : "Add Template"}
+                    Cancel
                   </button>
                   <button
-                    onClick={closeForm}
-                    className="flex-1 inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-semibold transition-all duration-200 hover:opacity-90"
-                    style={{
-                      background: "rgba(148,163,184,0.1)",
-                      color: "var(--muted-foreground)",
-                      border: "1px solid rgba(148,163,184,0.2)",
-                    }}
+                    onClick={handleSave}
+                    disabled={saving}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-5 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 transition-all duration-200 shadow-[0_0_12px_rgba(99,102,241,0.25)]"
                   >
-                    <X className="w-4 h-4" />
+                    {saving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Check className="w-4 h-4" />
+                    )}
+                    {saving ? "Saving..." : editingId ? "Save Changes" : "Add Recurring"}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Delete Confirmation Modal ── */}
+      <AnimatePresence>
+        {deleteId && (
+          <>
+            <motion.div
+              key="delete-overlay"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
+              onClick={() => setDeleteId(null)}
+            />
+            <motion.div
+              key="delete-panel"
+              initial={{ opacity: 0, scale: 0.94, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.94, y: 16 }}
+              transition={{ duration: 0.22, ease: "easeOut" }}
+              className="fixed inset-0 z-50 flex items-center justify-center p-4"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Confirm delete"
+            >
+              <div
+                className="w-full max-w-sm glass rounded-2xl border border-[var(--border)] shadow-[0_8px_48px_rgba(0,0,0,0.5)] p-6"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-red-950/50 border border-red-800/40">
+                    <Trash2 className="w-5 h-5 text-red-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-semibold text-[var(--foreground)]">
+                      Delete Recurring Expense
+                    </h3>
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      This action cannot be undone.
+                    </p>
+                  </div>
+                </div>
+                <p className="text-sm text-[var(--muted-foreground)] mb-6">
+                  Are you sure you want to delete{" "}
+                  <span className="font-medium text-[var(--foreground)]">
+                    {items.find((r) => r.id === deleteId)?.title ?? "this expense"}
+                  </span>
+                  ? It will be permanently removed.
+                </p>
+                <div className="flex items-center justify-end gap-3">
+                  <button
+                    onClick={() => setDeleteId(null)}
+                    className="rounded-xl border border-[var(--border)] px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-all duration-200"
+                  >
                     Cancel
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-60 transition-all duration-200"
+                  >
+                    {deleting ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    {deleting ? "Deleting..." : "Delete"}
                   </button>
                 </div>
               </div>
