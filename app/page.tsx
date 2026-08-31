@@ -6,9 +6,15 @@ import { motion } from "framer-motion";
 import { ArrowRight, Check, Star, TrendingUp, Shield, Bell, PieChart, Zap, ChevronRight } from 'lucide-react';
 import { Reveal } from "@/components/Reveal";
 import { BRAND } from "@/lib/data";
-type formatCurrency = any;
-const formatCurrency: any = [];
 import { staggerContainer, fadeInUp, scaleIn } from "@/lib/motion";
+
+function formatCurrency(amount: number, currency = 'USD'): string {
+  try {
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(amount ?? 0);
+  } catch {
+    return `$${(amount ?? 0).toFixed(2)}`;
+  }
+}
 
 const FEATURES = [
   {
@@ -124,325 +130,450 @@ export default function HomePage() {
     <main className="overflow-x-hidden">
       {/* ── Hero ── */}
       <Reveal>
-        <section className="relative min-h-[92vh] flex items-center bg-[hsl(var(--background))]">
+        <section className="relative min-h-[92vh] flex items-center" style={{ background: 'var(--background)' }}>
           {/* Subtle radial glow */}
           <div
             aria-hidden
             className="pointer-events-none absolute inset-0 overflow-hidden"
           >
-            <div className="absolute -top-32 left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full bg-[var(--accent)]/8 blur-[120px]" />
+            <div
+              className="absolute -top-32 left-1/2 -translate-x-1/2 w-[900px] h-[600px] rounded-full"
+              style={{
+                background:
+                  "radial-gradient(ellipse at center, rgba(99,102,241,0.18) 0%, transparent 70%)",
+                filter: "blur(60px)",
+              }}
+            />
           </div>
 
-          <div className="relative mx-auto max-w-7xl px-6 py-24 md:py-32 grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+          <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 grid lg:grid-cols-2 gap-16 items-center">
             {/* Left: copy */}
             <motion.div
               variants={staggerContainer}
               initial="hidden"
               animate="visible"
-              className="flex flex-col gap-6"
+              className="space-y-8"
             >
               <motion.div variants={fadeInUp}>
-                <span className="inline-flex items-center gap-2 rounded-full border border-[var(--accent)]/30 bg-[var(--accent)]/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-[var(--accent)] uppercase">
-                  Personal Finance Tracker
+                <span
+                  className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold tracking-wide uppercase"
+                  style={{
+                    background: "rgba(99,102,241,0.15)",
+                    color: "var(--primary)",
+                    border: "1px solid rgba(99,102,241,0.3)",
+                  }}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--primary)] animate-pulse" />
+                  Now in open beta
                 </span>
               </motion.div>
 
               <motion.h1
                 variants={fadeInUp}
-                className="text-5xl md:text-6xl font-bold tracking-tight text-[hsl(var(--foreground))] leading-[1.08] text-balance"
+                className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.1] text-balance"
+                style={{ color: "var(--foreground)" }}
               >
-                Know exactly where your money goes
+                Know exactly{" "}
+                <span
+                  className="relative"
+                  style={{
+                    background: "linear-gradient(135deg, var(--primary) 0%, #818CF8 100%)",
+                    WebkitBackgroundClip: "text",
+                    WebkitTextFillColor: "transparent",
+                    backgroundClip: "text",
+                  }}
+                >
+                  where your money goes
+                </span>
               </motion.h1>
 
               <motion.p
                 variants={fadeInUp}
-                className="text-lg text-[hsl(var(--muted-foreground))] leading-relaxed max-w-lg text-pretty"
+                className="text-lg leading-relaxed max-w-lg"
+                style={{ color: "var(--muted-foreground)" }}
               >
-                {BRAND.description} Log expenses in seconds, set category budgets, and get a clear picture of your finances every month.
+                {BRAND.description}
               </motion.p>
 
-              <motion.div variants={fadeInUp} className="flex flex-wrap gap-3 pt-2">
+              <motion.div variants={fadeInUp} className="flex flex-wrap gap-4">
                 <Link
                   href="/signup"
-                  className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-6 py-3 text-sm font-semibold text-[hsl(var(--background))] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:opacity-90 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm text-white transition-all duration-300 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_24px_rgba(99,102,241,0.4)]"
+                  style={{ background: "var(--primary)" }}
                 >
                   Get started free
-                  <ArrowRight className="h-4 w-4" />
+                  <ArrowRight className="w-4 h-4" />
                 </Link>
                 <Link
                   href="/login"
-                  className="inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-6 py-3 text-sm font-semibold text-[hsl(var(--foreground))] transition-all duration-300 hover:border-[var(--accent)]/50 hover:bg-[hsl(var(--card))]/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm transition-all duration-300 hover:opacity-80"
+                  style={{
+                    color: "var(--foreground)",
+                    border: "1px solid var(--border)",
+                    background: "rgba(255,255,255,0.03)",
+                  }}
                 >
                   Sign in
+                  <ChevronRight className="w-4 h-4" />
                 </Link>
               </motion.div>
 
-              <motion.p
-                variants={fadeInUp}
-                className="text-xs text-[hsl(var(--muted-foreground))]"
-              >
-                No credit card required. Free to use.
-              </motion.p>
+              <motion.ul variants={fadeInUp} className="flex flex-wrap gap-x-6 gap-y-2">
+                {["Free forever plan", "No credit card", "Cancel anytime"].map((item) => (
+                  <li
+                    key={item}
+                    className="flex items-center gap-1.5 text-sm"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    <Check className="w-3.5 h-3.5" style={{ color: "var(--success)" }} />
+                    {item}
+                  </li>
+                ))}
+              </motion.ul>
             </motion.div>
 
-            {/* Right: mock expense list */}
+            {/* Right: mock dashboard card */}
             <motion.div
               variants={scaleIn}
               initial="hidden"
               animate="visible"
-              className="relative"
+              className="hidden lg:block"
             >
-              <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-[0_4px_24px_-8px_rgba(0,0,0,0.18)] overflow-hidden">
-                {/* Card header */}
-                <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
-                  <div>
-                    <p className="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wide font-medium">June 2025</p>
-                    <p className="text-xl font-bold text-[hsl(var(--foreground))] mt-0.5">
-                      {mounted ? formatCurrency(287.79) : "$287.79"}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-[var(--accent)]/15 px-3 py-1 text-xs font-semibold text-[var(--accent)]">
-                    4 expenses
+              <div
+                className="rounded-2xl p-6 space-y-4"
+                style={{
+                  background: "rgba(26,26,46,0.8)",
+                  backdropFilter: "blur(16px)",
+                  border: "1px solid var(--border)",
+                  boxShadow:
+                    "0 1px 2px rgba(0,0,0,0.2), 0 24px 64px -16px rgba(0,0,0,0.6), 0 0 0 1px rgba(99,102,241,0.08)",
+                }}
+              >
+                {/* Mini header */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                    June 2024
+                  </span>
+                  <span
+                    className="text-xs px-2 py-0.5 rounded-full"
+                    style={{
+                      background: "rgba(16,185,129,0.15)",
+                      color: "#10B981",
+                    }}
+                  >
+                    On track
                   </span>
                 </div>
 
-                {/* Expense rows */}
-                <ul className="divide-y divide-[hsl(var(--border))]">
-                  {SAMPLE_EXPENSES.map((exp, i) => (
-                    <motion.li
-                      key={exp.title}
-                      initial={{ opacity: 0, x: 16 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.3 + i * 0.1, duration: 0.4, ease: "easeOut" }}
-                      className="flex items-center gap-3 px-5 py-3.5"
+                {/* Summary row */}
+                <div className="grid grid-cols-3 gap-3">
+                  {[
+                    { label: "Spent", value: formatCurrency(1284.5), color: "var(--foreground)" },
+                    { label: "Budget", value: formatCurrency(2000), color: "var(--muted-foreground)" },
+                    { label: "Left", value: formatCurrency(715.5), color: "#10B981" },
+                  ].map((stat) => (
+                    <div
+                      key={stat.label}
+                      className="rounded-xl p-3 text-center"
+                      style={{ background: "rgba(255,255,255,0.04)" }}
                     >
-                      <span className="text-xl">{exp.icon}</span>
+                      <p className="text-xs mb-1" style={{ color: "var(--muted-foreground)" }}>
+                        {stat.label}
+                      </p>
+                      <p className="text-sm font-bold" style={{ color: stat.color }}>
+                        {stat.value}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Expense list */}
+                <div className="space-y-2">
+                  {SAMPLE_EXPENSES.map((expense) => (
+                    <div
+                      key={expense.title}
+                      className="flex items-center gap-3 p-3 rounded-xl transition-colors"
+                      style={{ background: "rgba(255,255,255,0.03)" }}
+                    >
+                      <span className="text-xl">{expense.icon}</span>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-[hsl(var(--foreground))] truncate">{exp.title}</p>
-                        <p className="text-xs text-[hsl(var(--muted-foreground))]">{exp.category}</p>
+                        <p
+                          className="text-sm font-medium truncate"
+                          style={{ color: "var(--foreground)" }}
+                        >
+                          {expense.title}
+                        </p>
+                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                          {expense.category}
+                        </p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-semibold text-[hsl(var(--foreground))]">
-                          {mounted ? formatCurrency(exp.amount) : `$${exp.amount.toFixed(2)}`}
+                        <p className="text-sm font-semibold" style={{ color: "var(--foreground)" }}>
+                          {formatCurrency(expense.amount)}
                         </p>
-                        <p className="text-xs text-[hsl(var(--muted-foreground))]">{exp.date}</p>
+                        <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                          {expense.date}
+                        </p>
                       </div>
-                    </motion.li>
+                    </div>
                   ))}
-                </ul>
+                </div>
 
-                {/* Budget bar */}
-                <div className="px-5 py-4 bg-[hsl(var(--muted))]/40 border-t border-[hsl(var(--border))]">
-                  <div className="flex justify-between text-xs text-[hsl(var(--muted-foreground))] mb-2">
-                    <span>Monthly budget</span>
-                    <span className="font-medium text-[hsl(var(--foreground))]">57% used</span>
+                {/* Progress bar */}
+                <div>
+                  <div className="flex justify-between text-xs mb-1.5" style={{ color: "var(--muted-foreground)" }}>
+                    <span>Monthly budget used</span>
+                    <span>64%</span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-[hsl(var(--border))]">
-                    <motion.div
-                      className="h-full rounded-full bg-[var(--accent)]"
-                      initial={{ width: 0 }}
-                      animate={{ width: "57%" }}
-                      transition={{ delay: 0.8, duration: 0.7, ease: "easeOut" }}
+                  <div
+                    className="h-1.5 rounded-full overflow-hidden"
+                    style={{ background: "rgba(255,255,255,0.08)" }}
+                  >
+                    <div
+                      className="h-full rounded-full"
+                      style={{
+                        width: "64%",
+                        background: "linear-gradient(90deg, var(--primary) 0%, #818CF8 100%)",
+                      }}
                     />
                   </div>
                 </div>
               </div>
-
-              {/* Floating badge */}
-              <motion.div
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 1.1, duration: 0.4 }}
-                className="absolute -bottom-4 -left-4 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-4 py-2.5 shadow-[0_4px_16px_rgba(0,0,0,0.12)]"
-              >
-                <p className="text-xs text-[hsl(var(--muted-foreground))]">Saved this month</p>
-                <p className="text-lg font-bold text-[var(--accent)]">
-                  {mounted ? formatCurrency(212.21) : "$212.21"}
-                </p>
-              </motion.div>
             </motion.div>
           </div>
         </section>
       </Reveal>
 
-      {/* ── Social proof strip ── */}
+      {/* ── Features ── */}
       <Reveal>
-        <section className="border-y border-[hsl(var(--border))] bg-[hsl(var(--muted))]/30 py-8">
-          <div className="mx-auto max-w-7xl px-6">
-            <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16">
-              {[
-                { value: "14,000+", label: "expenses logged" },
-                { value: "3,200+", label: "active users" },
-                { value: "99.9%", label: "uptime" },
-                { value: "7 currencies", label: "supported" },
-              ].map((stat) => (
-                <div key={stat.label} className="text-center">
-                  <p className="text-2xl font-bold text-[hsl(var(--foreground))]">{stat.value}</p>
-                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5 uppercase tracking-wide">{stat.label}</p>
-                </div>
+        <section
+          id="features"
+          className="py-24"
+          style={{ background: "var(--card)" }}
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16 space-y-4">
+              <h2
+                className="text-3xl sm:text-4xl font-bold tracking-tight text-balance"
+                style={{ color: "var(--foreground)" }}
+              >
+                Everything you need to stay on budget
+              </h2>
+              <p
+                className="text-lg max-w-2xl mx-auto leading-relaxed"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                Built for people who want clarity without complexity.
+              </p>
+            </div>
+
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-80px" }}
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+            >
+              {FEATURES.map((feature) => {
+                const Icon = feature.icon;
+                return (
+                  <motion.div
+                    key={feature.title}
+                    variants={fadeInUp}
+                    className="rounded-2xl p-6 space-y-4 group transition-all duration-300 hover:-translate-y-1"
+                    style={{
+                      background: "rgba(255,255,255,0.03)",
+                      border: "1px solid var(--border)",
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                    }}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      style={{ background: `${feature.color}20` }}
+                    >
+                      <Icon className="w-5 h-5" style={{ color: feature.color }} />
+                    </div>
+                    <h3
+                      className="text-base font-semibold"
+                      style={{ color: "var(--foreground)" }}
+                    >
+                      {feature.title}
+                    </h3>
+                    <p
+                      className="text-sm leading-relaxed"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      {feature.description}
+                    </p>
+                  </motion.div>
+                );
+              })}
+            </motion.div>
+          </div>
+        </section>
+      </Reveal>
+
+      {/* ── How it works ── */}
+      <Reveal>
+        <section className="py-24" style={{ background: "var(--background)" }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16 space-y-4">
+              <h2
+                className="text-3xl sm:text-4xl font-bold tracking-tight text-balance"
+                style={{ color: "var(--foreground)" }}
+              >
+                Up and running in minutes
+              </h2>
+              <p
+                className="text-lg max-w-xl mx-auto"
+                style={{ color: "var(--muted-foreground)" }}
+              >
+                No complicated setup. No spreadsheets. Just clear financial visibility.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+              {STEPS.map((step, index) => (
+                <Reveal key={step.number} delay={index * 0.1}>
+                  <div className="space-y-4">
+                    <div
+                      className="text-4xl font-black tracking-tighter"
+                      style={{
+                        background: "linear-gradient(135deg, var(--primary) 0%, rgba(99,102,241,0.3) 100%)",
+                        WebkitBackgroundClip: "text",
+                        WebkitTextFillColor: "transparent",
+                        backgroundClip: "text",
+                      }}
+                    >
+                      {step.number}
+                    </div>
+                    <h3
+                      className="text-base font-semibold"
+                      style={{ color: "var(--foreground)" }}
+                    >
+                      {step.title}
+                    </h3>
+                    <p
+                      className="text-sm leading-relaxed"
+                      style={{ color: "var(--muted-foreground)" }}
+                    >
+                      {step.description}
+                    </p>
+                  </div>
+                </Reveal>
               ))}
             </div>
           </div>
         </section>
       </Reveal>
 
-      {/* ── Features ── */}
-      <section id="features" className="py-24 md:py-32 bg-[hsl(var(--background))]">
-        <div className="mx-auto max-w-7xl px-6">
-          <Reveal>
-            <div className="max-w-2xl mb-16">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">Features</p>
-              <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-[hsl(var(--foreground))] text-balance">
-                Built for people who want real answers
-              </h2>
-              <p className="mt-4 text-[hsl(var(--muted-foreground))] leading-relaxed text-pretty">
-                Not another app that shows you a pie chart and calls it done. ExpenseIQ gives you the tools to actually change your spending habits.
-              </p>
-            </div>
-          </Reveal>
-
-          <motion.div
-            variants={staggerContainer}
-            initial="hidden"
-            whileInView="visible"
-            viewport={{ once: true, margin: "-80px" }}
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"
-          >
-            {FEATURES.map((feat, i) => {
-              const Icon = feat.icon;
-              const isLarge = i === 0 || i === 4;
-              return (
-                <motion.div
-                  key={feat.title}
-                  variants={fadeInUp}
-                  whileHover={{ y: -4, transition: { duration: 0.2 } }}
-                  className={`rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.08)] transition-shadow duration-300 hover:shadow-[0_4px_32px_-8px_rgba(0,0,0,0.14)] ${isLarge ? "lg:col-span-1 lg:row-span-1" : ""}`}
-                >
-                  <div
-                    className="inline-flex h-10 w-10 items-center justify-center rounded-xl mb-4"
-                    style={{ background: `${feat.color}18` }}
-                  >
-                    <Icon className="h-5 w-5" style={{ color: feat.color }} />
-                  </div>
-                  <h3 className="text-base font-semibold text-[hsl(var(--foreground))] mb-2">{feat.title}</h3>
-                  <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">{feat.description}</p>
-                </motion.div>
-              );
-            })}
-          </motion.div>
-        </div>
-      </section>
-
-      {/* ── How it works ── */}
-      <section id="about" className="py-24 md:py-32 bg-[hsl(var(--muted))]/25">
-        <div className="mx-auto max-w-7xl px-6">
-          <Reveal>
-            <div className="text-center max-w-2xl mx-auto mb-16">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">How it works</p>
-              <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-[hsl(var(--foreground))] text-balance">
-                Up and running in four steps
-              </h2>
-            </div>
-          </Reveal>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {STEPS.map((step, i) => (
-              <Reveal key={step.number} delay={i * 0.1}>
-                <div className="relative flex flex-col gap-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.08)]">
-                  <span className="text-4xl font-black text-[var(--accent)]/20 leading-none select-none">
-                    {step.number}
-                  </span>
-                  <h3 className="text-base font-semibold text-[hsl(var(--foreground))]">{step.title}</h3>
-                  <p className="text-sm text-[hsl(var(--muted-foreground))] leading-relaxed">{step.description}</p>
-                  {i < STEPS.length - 1 && (
-                    <ChevronRight className="absolute -right-3 top-1/2 -translate-y-1/2 h-5 w-5 text-[hsl(var(--border))] hidden lg:block" />
-                  )}
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* ── Testimonials ── */}
-      <section className="py-24 md:py-32 bg-[hsl(var(--background))]">
-        <div className="mx-auto max-w-7xl px-6">
-          <Reveal>
-            <div className="max-w-xl mb-16">
-              <p className="text-xs font-semibold uppercase tracking-widest text-[var(--accent)] mb-3">From users</p>
-              <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-[hsl(var(--foreground))] text-balance">
-                What people say after one month
+      <Reveal>
+        <section className="py-24" style={{ background: "var(--card)" }}>
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16 space-y-4">
+              <h2
+                className="text-3xl sm:text-4xl font-bold tracking-tight text-balance"
+                style={{ color: "var(--foreground)" }}
+              >
+                Trusted by people who care about their money
               </h2>
             </div>
-          </Reveal>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {TESTIMONIALS.map((t, i) => (
-              <Reveal key={t.name} delay={i * 0.1}>
-                <div className="flex flex-col gap-5 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.08)] h-full">
-                  <div className="flex gap-1">
-                    {Array.from({ length: 5 }).map((_, j) => (
-                      <Star key={j} className="h-4 w-4 fill-[var(--accent)] text-[var(--accent)]" />
+            <motion.div
+              variants={staggerContainer}
+              initial="hidden"
+              whileInView="visible"
+              viewport={{ once: true, margin: "-80px" }}
+              className="grid grid-cols-1 md:grid-cols-3 gap-6"
+            >
+              {TESTIMONIALS.map((testimonial) => (
+                <motion.div
+                  key={testimonial.name}
+                  variants={fadeInUp}
+                  className="rounded-2xl p-6 space-y-4"
+                  style={{
+                    background: "rgba(255,255,255,0.03)",
+                    border: "1px solid var(--border)",
+                  }}
+                >
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star
+                        key={i}
+                        className="w-4 h-4 fill-current"
+                        style={{ color: "var(--accent)" }}
+                      />
                     ))}
                   </div>
-                  <p className="text-sm text-[hsl(var(--foreground))] leading-relaxed flex-1">
-                    &ldquo;{t.quote}&rdquo;
+                  <p
+                    className="text-sm leading-relaxed"
+                    style={{ color: "var(--muted-foreground)" }}
+                  >
+                    &ldquo;{testimonial.quote}&rdquo;
                   </p>
-                  <div className="flex items-center gap-3 pt-2 border-t border-[hsl(var(--border))]">
-                    <div className="h-9 w-9 rounded-full bg-[var(--accent)]/15 flex items-center justify-center text-xs font-bold text-[var(--accent)]">
-                      {t.avatar}
+                  <div className="flex items-center gap-3 pt-2">
+                    <div
+                      className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white"
+                      style={{ background: "var(--primary)" }}
+                    >
+                      {testimonial.avatar}
                     </div>
                     <div>
-                      <p className="text-sm font-semibold text-[hsl(var(--foreground))]">{t.name}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{t.role}</p>
+                      <p
+                        className="text-sm font-semibold"
+                        style={{ color: "var(--foreground)" }}
+                      >
+                        {testimonial.name}
+                      </p>
+                      <p className="text-xs" style={{ color: "var(--muted-foreground)" }}>
+                        {testimonial.role}
+                      </p>
                     </div>
                   </div>
-                </div>
-              </Reveal>
-            ))}
+                </motion.div>
+              ))}
+            </motion.div>
           </div>
-        </div>
-      </section>
+        </section>
+      </Reveal>
 
       {/* ── CTA ── */}
       <Reveal>
-        <section className="py-24 md:py-32 bg-[hsl(var(--muted))]/25">
-          <div className="mx-auto max-w-7xl px-6">
-            <div className="relative rounded-3xl border border-[var(--accent)]/20 bg-[hsl(var(--card))] overflow-hidden px-8 py-16 md:px-16 text-center shadow-[0_4px_40px_-12px_rgba(0,0,0,0.12)]">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0"
+        <section className="py-24" style={{ background: "var(--background)" }}>
+          <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center space-y-8">
+            <h2
+              className="text-3xl sm:text-4xl font-bold tracking-tight text-balance"
+              style={{ color: "var(--foreground)" }}
+            >
+              Start tracking your expenses today
+            </h2>
+            <p
+              className="text-lg leading-relaxed"
+              style={{ color: "var(--muted-foreground)" }}
+            >
+              Join thousands of people who finally understand where their money goes.
+            </p>
+            <div className="flex flex-wrap justify-center gap-4">
+              <Link
+                href="/signup"
+                className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold text-white transition-all duration-300 hover:opacity-90 hover:scale-[1.02] active:scale-[0.98] shadow-[0_0_32px_rgba(99,102,241,0.4)]"
+                style={{ background: "var(--primary)" }}
               >
-                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[300px] rounded-full bg-[var(--accent)]/10 blur-[80px]" />
-              </div>
-
-              <div className="relative">
-                <h2 className="text-4xl md:text-5xl font-bold tracking-tight text-[hsl(var(--foreground))] text-balance mb-4">
-                  Start tracking today
-                </h2>
-                <p className="text-[hsl(var(--muted-foreground))] max-w-lg mx-auto leading-relaxed mb-8 text-pretty">
-                  Create a free account, set your first budget, and log your first expense in under two minutes.
-                </p>
-
-                <div className="flex flex-wrap gap-3 justify-center">
-                  <Link
-                    href="/signup"
-                    className="inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-7 py-3.5 text-sm font-semibold text-[hsl(var(--background))] shadow-[0_2px_8px_rgba(0,0,0,0.15)] transition-all duration-300 hover:opacity-90 hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)]"
-                  >
-                    Create free account
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
-                </div>
-
-                <ul className="mt-6 flex flex-wrap justify-center gap-x-6 gap-y-2">
-                  {["No credit card", "Free forever plan", "Cancel anytime"].map((item) => (
-                    <li key={item} className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
-                      <Check className="h-3.5 w-3.5 text-[var(--accent)]" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
+                Create free account
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex items-center gap-2 px-8 py-4 rounded-xl font-semibold transition-all duration-300 hover:opacity-80"
+                style={{
+                  color: "var(--foreground)",
+                  border: "1px solid var(--border)",
+                  background: "rgba(255,255,255,0.03)",
+                }}
+              >
+                Sign in
+              </Link>
             </div>
           </div>
         </section>
