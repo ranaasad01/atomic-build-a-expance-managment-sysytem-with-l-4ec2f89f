@@ -17,6 +17,9 @@ const productLinks = [
   { label: "Dashboard", href: "/dashboard", key: "dashboard" },
   { label: "Expenses", href: "/expenses", key: "expenses" },
   { label: "Budget", href: "/budget", key: "budget" },
+  { label: "Analytics", href: "/analytics", key: "analytics" },
+  { label: "Reports", href: "/reports", key: "reports" },
+  { label: "Recurring", href: "/recurring", key: "recurring" },
 ];
 
 export default function Footer() {
@@ -102,7 +105,7 @@ export default function Footer() {
         {/* Bottom bar */}
         <div className="pt-8 border-t border-[var(--border)] flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-[var(--muted-foreground)]">
-            {footerT["copyright"] ?? "© 2024 ExpenseIQ. All rights reserved."}
+            {footerT["copyright"] ?? "\u00a9 2024 ExpenseIQ. All rights reserved."}
           </p>
           <p className="text-xs text-[var(--muted-foreground)]">
             {footerT["tagline"] ?? "Built for clarity. Designed for control."}

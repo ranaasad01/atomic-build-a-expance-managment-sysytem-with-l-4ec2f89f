@@ -2,12 +2,12 @@
 
 import { NextIntlClientProvider, type AbstractIntlMessages } from "next-intl";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const en = require("@/messages/en.json") as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const es = require("@/messages/es.json") as any;
 
-const MESSAGES: Record<string, AbstractIntlMessages> = {
-  en: (await import("@/messages/en.json")).default as unknown as AbstractIntlMessages,
-  es: (await import("@/messages/es.json")).default as unknown as AbstractIntlMessages,
-};
-
+const MESSAGES: Record<string, AbstractIntlMessages> = { en, es };
 const DEFAULT_LOCALE = process.env.NEXT_PUBLIC_DEFAULT_LOCALE || "en";
 const LOCALES = (process.env.NEXT_PUBLIC_LOCALES || "en,es")
   .split(",").map((s) => s.trim()).filter(Boolean);
@@ -18,24 +18,17 @@ export const useSiteLocale = () => useContext(LocaleCtx);
 
 export default function LocaleProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState(DEFAULT_LOCALE);
-  const [messages, setMessages] = useState<AbstractIntlMessages>(MESSAGES[DEFAULT_LOCALE] || {});
-
   useEffect(() => {
     try {
       const s = localStorage.getItem("site_locale");
-      if (s && LOCALES.includes(s)) {
-        setLocaleState(s);
-        setMessages(MESSAGES[s] || MESSAGES[DEFAULT_LOCALE] || {});
-      }
+      if (s && LOCALES.includes(s)) setLocaleState(s);
     } catch {}
   }, []);
-
   const setLocale = (l: string) => {
     setLocaleState(l);
-    setMessages(MESSAGES[l] || MESSAGES[DEFAULT_LOCALE] || {});
     try { localStorage.setItem("site_locale", l); } catch {}
   };
-
+  const messages = MESSAGES[locale] || MESSAGES[DEFAULT_LOCALE] || {};
   return (
     <LocaleCtx.Provider value={{ locale, setLocale, locales: LOCALES }}>
       <NextIntlClientProvider

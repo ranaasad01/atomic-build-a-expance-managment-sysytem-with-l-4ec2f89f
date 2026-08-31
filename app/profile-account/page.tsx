@@ -90,12 +90,16 @@ export default function ProfileAccountPage() {
         }
         const topCatId = Object.entries(catMap).sort((a, b) => b[1] - a[1])[0]?.[0];
         if (topCatId) {
+          const fallbackCat = EXPENSE_CATEGORIES.find((e) =>
+            (e as { name: string; icon: string; color: string }).name.toLowerCase().includes(topCatId.toLowerCase())
+          );
           const { data: catRow } = await supabase
             .from("categories")
             .select("name")
             .eq("id", topCatId)
             .single();
           if (catRow) setTopCategory(catRow.name);
+          else if (fallbackCat) setTopCategory((fallbackCat as { name: string; icon: string; color: string }).name);
         }
       }
 
@@ -163,7 +167,7 @@ export default function ProfileAccountPage() {
   }
 
   const statCards: StatCard[] = [
-    { label: "Total Spent", value: formatCurrency(totalExpenses, preferredCurrency), icon: "💸", color: "var(--accent)" },
+    { label: "Total Spent", value: `$${totalExpenses.toFixed(2)}`, icon: "💸", color: "var(--accent)" },
     { label: "Expenses Logged", value: String(expenseCount), icon: "📋", color: "#6366F1" },
     { label: "Active Budgets", value: String(budgetCount), icon: "🎯", color: "#10B981" },
     { label: "Top Category", value: topCategory, icon: "🏆", color: "#F59E0B" },

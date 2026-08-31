@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { Menu, X, Sparkles, LogOut, User } from 'lucide-react';
+import { Menu, X, Sparkles, LogOut, User, ChevronDown } from 'lucide-react';
 import { useTranslations } from "next-intl";
 import { navLinks, BRAND } from "@/lib/data";
 import { createClient } from "@/lib/supabase/client";
@@ -20,8 +20,7 @@ export default function Navbar() {
 
   const navT = (Array.isArray(t.raw("nav")) ? {} : t.raw("nav")) as Record<string, string>;
 
-  const isAuthPage =
-    pathname === "/login" || pathname === "/signup";
+  const isAuthPage = pathname === "/login" || pathname === "/signup";
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 16);
@@ -46,6 +45,8 @@ export default function Navbar() {
     router.push("/login");
   };
 
+  // For anchor links: smooth-scroll on homepage, navigate to /#anchor from other pages.
+  // For route links (starting with /): always use Next.js router — never preventDefault.
   const handleNavClick = (
     e: React.MouseEvent<HTMLAnchorElement>,
     href: string
@@ -55,7 +56,9 @@ export default function Navbar() {
         e.preventDefault();
         document.querySelector(href)?.scrollIntoView({ behavior: "smooth" });
       }
+      // else: let the link navigate to /#anchor naturally
     }
+    // Route links: do nothing — let Next.js <Link> handle navigation
     setMobileOpen(false);
   };
 
@@ -63,8 +66,10 @@ export default function Navbar() {
     if (href.startsWith("#")) {
       return pathname === "/" ? href : "/" + href;
     }
-    return href;
+    return href; // route links returned as-is
   };
+
+  if (isAuthPage) return null;
 
   return (
     <motion.header
@@ -87,7 +92,7 @@ export default function Navbar() {
           className="flex items-center gap-2 group"
           aria-label={`${BRAND.name} home`}
         >
-          <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center shadow-[0_0_16px_rgba(99,102,241,0.4)] group-hover:shadow-[0_0_24px_rgba(99,102,241,0.6)] transition-shadow duration-300">
+          <div className="w-8 h-8 rounded-lg bg-[var(--primary)] flex items-center justify-center shadow-[0_0_16px_rgba(99,102,241,0.3)]">
             <Sparkles className="w-4 h-4 text-white" aria-hidden="true" />
           </div>
           <span className="text-[var(--foreground)] font-bold text-lg tracking-tight">
@@ -96,43 +101,42 @@ export default function Navbar() {
         </Link>
 
         {/* Desktop nav */}
-        {!isAuthPage && user && (
-          <div className="hidden md:flex items-center gap-1">
-            {navLinks.map((link) => {
-              const isActive = pathname === link.href || pathname.startsWith(link.href + "/");
-              return (
-                <Link
-                  key={link.key}
-                  href={getLinkHref(link.href)}
-                  onClick={(e) => handleNavClick(e, link.href)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                    isActive
-                      ? "bg-[var(--primary)]/20 text-[var(--primary)]"
-                      : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5"
-                  }`}
-                  aria-current={isActive ? "page" : undefined}
-                >
-                  {navT[link.key] ?? link.label}
-                </Link>
-              );
-            })}
-          </div>
-        )}
+        <div className="hidden md:flex items-center gap-1">
+          {user && navLinks.map((link) => {
+            const href = getLinkHref(link.href);
+            const isActive = link.href.startsWith("/") && pathname === link.href;
+            return (
+              <Link
+                key={link.key}
+                href={href}
+                onClick={(e) => handleNavClick(e, link.href)}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
+                  isActive
+                    ? "bg-[var(--primary)]/15 text-[var(--primary)]"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5"
+                }`}
+              >
+                {navT[link.key] ?? link.label}
+              </Link>
+            );
+          })}
+        </div>
 
-        {/* Desktop right actions */}
-        <div className="hidden md:flex items-center gap-3">
+        {/* Right side */}
+        <div className="flex items-center gap-2">
           {user ? (
             <div className="relative">
               <button
                 onClick={() => setUserMenuOpen((v) => !v)}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-all duration-200"
-                aria-label="User menu"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-all duration-200"
                 aria-expanded={userMenuOpen}
+                aria-haspopup="true"
               >
-                <div className="w-7 h-7 rounded-full bg-[var(--primary)]/20 border border-[var(--primary)]/30 flex items-center justify-center">
-                  <User className="w-3.5 h-3.5 text-[var(--primary)]" aria-hidden="true" />
+                <div className="w-7 h-7 rounded-full bg-[var(--primary)]/20 flex items-center justify-center">
+                  <User className="w-3.5 h-3.5 text-[var(--primary)]" />
                 </div>
-                <span className="max-w-[120px] truncate">{user.email}</span>
+                <span className="hidden sm:block max-w-[120px] truncate">{user.email}</span>
+                <ChevronDown className="w-3.5 h-3.5" />
               </button>
               <AnimatePresence>
                 {userMenuOpen && (
@@ -141,21 +145,21 @@ export default function Navbar() {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: 8, scale: 0.95 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute right-0 top-full mt-2 w-48 glass rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.45)] overflow-hidden"
+                    className="absolute right-0 top-full mt-2 w-48 glass rounded-xl border border-[var(--border)] shadow-xl overflow-hidden"
                   >
                     <Link
                       href="/profile"
                       onClick={() => setUserMenuOpen(false)}
-                      className="flex items-center gap-2 px-4 py-3 text-sm text-[var(--foreground)] hover:bg-white/5 transition-colors"
+                      className="flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-colors"
                     >
-                      <User className="w-4 h-4 text-[var(--muted-foreground)]" aria-hidden="true" />
+                      <User className="w-4 h-4" />
                       Profile
                     </Link>
                     <button
                       onClick={() => { setUserMenuOpen(false); handleLogout(); }}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-sm text-[var(--destructive)] hover:bg-white/5 transition-colors"
+                      className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-[var(--destructive)] hover:bg-[var(--destructive)]/10 transition-colors"
                     >
-                      <LogOut className="w-4 h-4" aria-hidden="true" />
+                      <LogOut className="w-4 h-4" />
                       Sign out
                     </button>
                   </motion.div>
@@ -163,38 +167,32 @@ export default function Navbar() {
               </AnimatePresence>
             </div>
           ) : (
-            !isAuthPage && (
-              <>
-                <Link
-                  href="/login"
-                  className="px-4 py-2 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-all duration-200"
-                >
-                  Sign in
-                </Link>
-                <Link
-                  href="/signup"
-                  className="px-4 py-2 rounded-lg text-sm font-medium bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 shadow-[0_0_16px_rgba(99,102,241,0.3)] hover:shadow-[0_0_24px_rgba(99,102,241,0.5)] transition-all duration-200"
-                >
-                  Get started
-                </Link>
-              </>
-            )
+            <div className="flex items-center gap-2">
+              <Link
+                href="/login"
+                className="px-3 py-1.5 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-all duration-200"
+              >
+                Sign In
+              </Link>
+              <Link
+                href="/signup"
+                className="px-4 py-1.5 rounded-lg text-sm font-semibold bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 transition-all duration-200 shadow-[0_0_16px_rgba(99,102,241,0.3)]"
+              >
+                Sign Up
+              </Link>
+            </div>
           )}
-        </div>
 
-        {/* Mobile menu button */}
-        <button
-          className="md:hidden p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-all duration-200"
-          onClick={() => setMobileOpen((v) => !v)}
-          aria-label={mobileOpen ? "Close menu" : "Open menu"}
-          aria-expanded={mobileOpen}
-        >
-          {mobileOpen ? (
-            <X className="w-5 h-5" aria-hidden="true" />
-          ) : (
-            <Menu className="w-5 h-5" aria-hidden="true" />
-          )}
-        </button>
+          {/* Mobile menu button */}
+          <button
+            className="md:hidden p-2 rounded-lg text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-colors"
+            onClick={() => setMobileOpen((v) => !v)}
+            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-expanded={mobileOpen}
+          >
+            {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile menu */}
@@ -204,55 +202,45 @@ export default function Navbar() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
+            transition={{ duration: 0.2 }}
             className="md:hidden glass border-t border-[var(--border)] overflow-hidden"
           >
-            <div className="px-4 py-4 flex flex-col gap-1">
-              {user &&
-                navLinks.map((link) => {
-                  const isActive = pathname === link.href;
-                  return (
-                    <Link
-                      key={link.key}
-                      href={getLinkHref(link.href)}
-                      onClick={(e) => handleNavClick(e, link.href)}
-                      className={`px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
-                        isActive
-                          ? "bg-[var(--primary)]/20 text-[var(--primary)]"
-                          : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5"
-                      }`}
-                    >
-                      {navT[link.key] ?? link.label}
-                    </Link>
-                  );
-                })}
-              {user ? (
+            <div className="px-4 py-3 space-y-1">
+              {user && navLinks.map((link) => {
+                const href = getLinkHref(link.href);
+                const isActive = link.href.startsWith("/") && pathname === link.href;
+                return (
+                  <Link
+                    key={link.key}
+                    href={href}
+                    onClick={(e) => handleNavClick(e, link.href)}
+                    className={`block px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      isActive
+                        ? "bg-[var(--primary)]/15 text-[var(--primary)]"
+                        : "text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5"
+                    }`}
+                  >
+                    {navT[link.key] ?? link.label}
+                  </Link>
+                );
+              })}
+              {user && (
                 <button
                   onClick={handleLogout}
-                  className="mt-2 flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-medium text-[var(--destructive)] hover:bg-white/5 transition-all duration-200"
+                  className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-[var(--destructive)] hover:bg-[var(--destructive)]/10 transition-colors"
                 >
-                  <LogOut className="w-4 h-4" aria-hidden="true" />
                   Sign out
                 </button>
-              ) : (
-                !isAuthPage && (
-                  <div className="flex flex-col gap-2 mt-2">
-                    <Link
-                      href="/login"
-                      onClick={() => setMobileOpen(false)}
-                      className="px-4 py-3 rounded-lg text-sm font-medium text-center text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5 transition-all duration-200"
-                    >
-                      Sign in
-                    </Link>
-                    <Link
-                      href="/signup"
-                      onClick={() => setMobileOpen(false)}
-                      className="px-4 py-3 rounded-lg text-sm font-medium text-center bg-[var(--primary)] text-white hover:bg-[var(--primary)]/90 transition-all duration-200"
-                    >
-                      Get started
-                    </Link>
-                  </div>
-                )
+              )}
+              {!user && (
+                <>
+                  <Link href="/login" onClick={() => setMobileOpen(false)} className="block px-3 py-2 rounded-lg text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:bg-white/5">
+                    Sign In
+                  </Link>
+                  <Link href="/signup" onClick={() => setMobileOpen(false)} className="block px-3 py-2 rounded-lg text-sm font-semibold bg-[var(--primary)] text-white text-center">
+                    Sign Up
+                  </Link>
+                </>
               )}
             </div>
           </motion.div>
