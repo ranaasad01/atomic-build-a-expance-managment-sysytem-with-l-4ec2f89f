@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, DollarSign, Target, Wallet, Star, Plus, List, Settings, ArrowRight } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Target, Wallet, Plus, List, Settings, ArrowRight, PackageOpen } from 'lucide-react';
 import {
   BarChart,
   Bar,
@@ -73,89 +73,6 @@ interface BudgetRow {
   updated_at: string;
 }
 
-// ─── Mock fallback data ───────────────────────────────────────────────────────
-
-const MOCK_CATEGORIES: CategoryRow[] = EXPENSE_CATEGORIES.map((c, i) => ({
-  id: `cat-${i}`,
-  name: c.name,
-  icon: c.icon,
-  color: c.color,
-  created_at: new Date().toISOString(),
-}));
-
-const MOCK_EXPENSES: ExpenseRow[] = [
-  {
-    id: "e1",
-    user_id: "u1",
-    category_id: "cat-0",
-    title: "Grocery run",
-    amount: "84.50",
-    currency: "USD",
-    notes: null,
-    expense_date: "2024-06-10",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "e2",
-    user_id: "u1",
-    category_id: "cat-1",
-    title: "Uber to airport",
-    amount: "42.00",
-    currency: "USD",
-    notes: null,
-    expense_date: "2024-06-09",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "e3",
-    user_id: "u1",
-    category_id: "cat-2",
-    title: "New sneakers",
-    amount: "129.99",
-    currency: "USD",
-    notes: null,
-    expense_date: "2024-06-08",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "e4",
-    user_id: "u1",
-    category_id: "cat-3",
-    title: "Electricity bill",
-    amount: "95.00",
-    currency: "USD",
-    notes: null,
-    expense_date: "2024-06-07",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: "e5",
-    user_id: "u1",
-    category_id: "cat-5",
-    title: "Netflix subscription",
-    amount: "15.99",
-    currency: "USD",
-    notes: null,
-    expense_date: "2024-06-06",
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
-
-const MOCK_BUDGETS: BudgetRow[] = EXPENSE_CATEGORIES.map((c, i) => ({
-  id: `b-${i}`,
-  user_id: "u1",
-  category_id: `cat-${i}`,
-  monthly_limit: "300",
-  currency: "USD",
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-}));
-
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function buildBarData(expenses: ExpenseRow[]) {
@@ -170,90 +87,129 @@ function buildBarData(expenses: ExpenseRow[]) {
     { label: "Week 4", amount: 0 },
   ];
 
-  expenses.forEach((e) => {
-    const d = new Date(e.expense_date + "T00:00:00");
+  expenses.forEach((exp) => {
+    const d = new Date(exp.expense_date);
     if (d.getFullYear() !== year || d.getMonth() !== month) return;
-    const day = d.getDate();
-    const weekIdx = Math.min(Math.floor((day - 1) / 7), 3);
-    weeks[weekIdx].amount += parseFloat(e.amount) || 0;
+    const weekIdx = Math.min(Math.floor((d.getDate() - 1) / 7), 3);
+    weeks[weekIdx].amount += parseFloat(exp.amount) || 0;
   });
 
-  return weeks.map((w) => ({ ...w, amount: parseFloat(w.amount.toFixed(2)) }));
+  return weeks;
 }
 
-function buildPieData(
-  expenses: ExpenseRow[],
-  categories: CategoryRow[]
-) {
+function buildPieData(expenses: ExpenseRow[], categories: CategoryRow[]) {
   const totals: Record<string, number> = {};
-  expenses.forEach((e) => {
-    totals[e.category_id] = (totals[e.category_id] ?? 0) + (parseFloat(e.amount) || 0);
+  expenses.forEach((exp) => {
+    totals[exp.category_id] = (totals[exp.category_id] || 0) + (parseFloat(exp.amount) || 0);
   });
 
   return Object.entries(totals)
-    .map(([catId, value]) => {
+    .map(([catId, amount]) => {
       const cat = categories.find((c) => c.id === catId);
+      const staticCat = EXPENSE_CATEGORIES.find((c) => cat && c.name === cat.name);
       return {
         name: cat?.name ?? "Other",
-        value: parseFloat(value.toFixed(2)),
-        color: cat?.color ?? "#94A3B8",
-        icon: cat?.icon ?? "📦",
+        value: parseFloat(amount.toFixed(2)),
+        color: cat?.color ?? staticCat?.color ?? "#94A3B8",
       };
     })
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 6);
+    .filter((d) => d.value > 0)
+    .sort((a, b) => b.value - a.value);
 }
 
-// ─── Dashboard Component ──────────────────────────────────────────────────────
+function getThisMonthExpenses(expenses: ExpenseRow[]): ExpenseRow[] {
+  const now = new Date();
+  return expenses.filter((e) => {
+    const d = new Date(e.expense_date);
+    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+  });
+}
+
+function getTotalSpent(expenses: ExpenseRow[]): number {
+  return expenses.reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
+}
+
+function getTotalBudget(budgets: BudgetRow[]): number {
+  return budgets.reduce((sum, b) => sum + (parseFloat(b.monthly_limit) || 0), 0);
+}
+
+function getTopCategory(expenses: ExpenseRow[], categories: CategoryRow[]): string {
+  if (!expenses.length) return "—";
+  const totals: Record<string, number> = {};
+  expenses.forEach((e) => {
+    totals[e.category_id] = (totals[e.category_id] || 0) + (parseFloat(e.amount) || 0);
+  });
+  const topId = Object.entries(totals).sort((a, b) => b[1] - a[1])[0]?.[0];
+  return categories.find((c) => c.id === topId)?.name ?? "—";
+}
+
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+function EmptyState() {
+  return (
+    <motion.div
+      variants={fadeInUp}
+      initial="hidden"
+      animate="visible"
+      className="flex flex-col items-center justify-center py-20 px-4 text-center"
+    >
+      <div className="w-20 h-20 rounded-2xl bg-[var(--card)] border border-[var(--border)] flex items-center justify-center mb-6 shadow-[0_4px_24px_rgba(99,102,241,0.12)]">
+        <PackageOpen className="w-9 h-9 text-[var(--muted-foreground)]" />
+      </div>
+      <h3 className="text-xl font-semibold text-[var(--foreground)] mb-2">No expenses yet</h3>
+      <p className="text-[var(--muted-foreground)] max-w-sm mb-8 leading-relaxed">
+        Add your first expense to start tracking your spending and see insights here.
+      </p>
+      <Link
+        href="/expenses/add"
+        className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-[var(--primary)] text-white font-semibold hover:opacity-90 transition-all duration-200 shadow-[0_4px_16px_rgba(99,102,241,0.35)]"
+      >
+        <Plus className="w-4 h-4" />
+        Add your first expense
+      </Link>
+    </motion.div>
+  );
+}
+
+// ─── Dashboard Page ───────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [categories, setCategories] = useState<CategoryRow[]>(MOCK_CATEGORIES);
-  const [expenses, setExpenses] = useState<ExpenseRow[]>(MOCK_EXPENSES);
-  const [budgets, setBudgets] = useState<BudgetRow[]>(MOCK_BUDGETS);
+  const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
+  const [categories, setCategories] = useState<CategoryRow[]>([]);
+  const [budgets, setBudgets] = useState<BudgetRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [userName, setUserName] = useState<string>("there");
+  const [error, setError] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string>("");
 
   const fetchData = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const supabase = createClient();
 
       const { data: userData } = await supabase.auth.getUser();
-      const user = userData?.user;
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+      const email = userData?.user?.email ?? "";
+      setUserName(email.split("@")[0] ?? "");
 
-      const displayName =
-        user.user_metadata?.full_name ??
-        user.user_metadata?.name ??
-        user.email?.split("@")[0] ??
-        "there";
-      setUserName(displayName);
-
-      const [catsResult, expResult, budResult] = await Promise.all([
+      const [catResult, expResult, budResult] = await Promise.all([
         supabase.from("categories").select("*").order("name"),
         supabase
           .from("expenses")
           .select("*")
-          .eq("user_id", user.id)
           .order("expense_date", { ascending: false })
-          .limit(100),
-        supabase.from("budgets").select("*").eq("user_id", user.id),
+          .limit(200),
+        supabase.from("budgets").select("*"),
       ]);
 
-      if (catsResult.data && catsResult.data.length > 0) {
-        setCategories(catsResult.data as CategoryRow[]);
-      }
-      if (expResult.data) {
-        setExpenses(expResult.data as ExpenseRow[]);
-      }
-      if (budResult.data) {
-        setBudgets(budResult.data as BudgetRow[]);
-      }
+      setCategories(catResult.error ? [] : (catResult.data as CategoryRow[]) ?? []);
+      setExpenses(expResult.error ? [] : (expResult.data as ExpenseRow[]) ?? []);
+      setBudgets(budResult.error ? [] : (budResult.data as BudgetRow[]) ?? []);
     } catch (err) {
       console.error("Dashboard fetch error:", err);
+      setError("Failed to load dashboard data.");
+      setCategories([]);
+      setExpenses([]);
+      setBudgets([]);
     } finally {
       setLoading(false);
     }
@@ -263,449 +219,332 @@ export default function DashboardPage() {
     fetchData();
   }, [fetchData]);
 
-  // ── Derived stats ────────────────────────────────────────────────────────────
-
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  const monthlyExpenses = expenses.filter((e) => {
-    const d = new Date(e.expense_date + "T00:00:00");
-    return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
-  });
-
-  const totalSpentThisMonth = monthlyExpenses.reduce(
-    (sum, e) => sum + (parseFloat(e.amount) || 0),
-    0
-  );
-
-  const totalBudget = budgets.reduce(
-    (sum, b) => sum + (parseFloat(b.monthly_limit) || 0),
-    0
-  );
-
-  const budgetUsedPct =
-    totalBudget > 0 ? Math.min((totalSpentThisMonth / totalBudget) * 100, 100) : 0;
-
-  const recentExpenses = expenses.slice(0, 5);
-
+  const thisMonthExpenses = getThisMonthExpenses(expenses);
+  const totalSpent = getTotalSpent(thisMonthExpenses);
+  const totalBudget = getTotalBudget(budgets);
+  const topCategory = getTopCategory(thisMonthExpenses, categories);
   const barData = buildBarData(expenses);
-  const pieData = buildPieData(expenses, categories);
-
-  // Top category
-  const topCategory = pieData[0];
-
-  // Previous month comparison (mock: assume 10% less last month)
-  const prevMonthTotal = totalSpentThisMonth * 0.9;
-  const monthDelta = totalSpentThisMonth - prevMonthTotal;
-  const monthDeltaPct = prevMonthTotal > 0 ? (monthDelta / prevMonthTotal) * 100 : 0;
+  const pieData = buildPieData(thisMonthExpenses, categories);
+  const recentExpenses = expenses.slice(0, 5);
+  const hasExpenses = expenses.length > 0;
 
   const summaryCards = [
     {
-      label: "Total Spent",
-      value: formatCurrency(totalSpentThisMonth),
+      label: "Total Spent (This Month)",
+      value: formatCurrency(totalSpent),
       icon: DollarSign,
       color: "#6366F1",
-      sub: `${monthDeltaPct >= 0 ? "+" : ""}${monthDeltaPct.toFixed(1)}% vs last month`,
-      trend: monthDeltaPct >= 0 ? "up" : "down",
+      trend: null,
     },
     {
       label: "Monthly Budget",
-      value: formatCurrency(totalBudget),
+      value: totalBudget > 0 ? formatCurrency(totalBudget) : "Not set",
       icon: Target,
       color: "#F59E0B",
-      sub: `${budgetUsedPct.toFixed(0)}% used`,
-      trend: budgetUsedPct > 80 ? "up" : "down",
-    },
-    {
-      label: "Remaining",
-      value: formatCurrency(Math.max(totalBudget - totalSpentThisMonth, 0)),
-      icon: Wallet,
-      color: "#10B981",
-      sub: totalBudget > 0 ? `${(100 - budgetUsedPct).toFixed(0)}% of budget left` : "No budget set",
-      trend: "down",
+      trend: null,
     },
     {
       label: "Top Category",
-      value: topCategory?.name ?? "N/A",
-      icon: Star,
-      color: topCategory?.color ?? "#94A3B8",
-      sub: topCategory ? formatCurrency(topCategory.value) : "No expenses yet",
-      trend: "up",
+      value: topCategory,
+      icon: Wallet,
+      color: "#10B981",
+      trend: null,
+    },
+    {
+      label: "Transactions",
+      value: String(thisMonthExpenses.length),
+      icon: List,
+      color: "#8B5CF6",
+      trend: null,
     },
   ];
 
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--background)]">
+        <div className="flex flex-col items-center gap-4">
+          <div className="w-10 h-10 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+          <p className="text-sm text-[var(--muted-foreground)]">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div
-      className="min-h-screen pt-20 pb-16 px-4 sm:px-6 lg:px-8"
-      style={{ background: "var(--background)" }}
-    >
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-[var(--background)] mesh-bg pt-20 pb-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* ── Header ── */}
         <Reveal>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-10">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">
-                Welcome back, {userName} 👋
+              <h1 className="text-3xl font-bold text-[var(--foreground)] tracking-tight">
+                {userName ? `Welcome back, ${userName}` : "Dashboard"}
               </h1>
-              <p className="mt-1 text-[var(--muted-foreground)] text-sm">
-                Here's your financial overview for{" "}
-                {now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}.
+              <p className="text-[var(--muted-foreground)] mt-1 text-sm">
+                Here&apos;s your financial overview for this month.
               </p>
             </div>
             <div className="flex items-center gap-3">
               <Link
-                href="/expenses/add"
-                className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white shadow-[0_0_16px_rgba(99,102,241,0.3)] hover:opacity-90 transition-all duration-200"
+                href="/budget-settings"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-[var(--border)] text-[var(--muted-foreground)] hover:text-[var(--foreground)] hover:border-[var(--primary)] transition-all duration-200 text-sm font-medium"
               >
-                <Plus className="h-4 w-4" />
-                Add Expense
+                <Settings className="w-4 h-4" />
+                Budget Settings
               </Link>
               <Link
-                href="/budget"
-                className="inline-flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-semibold text-[var(--foreground)] hover:border-[var(--primary)] transition-all duration-200"
+                href="/expenses/add"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[var(--primary)] text-white font-semibold hover:opacity-90 transition-all duration-200 text-sm shadow-[0_4px_16px_rgba(99,102,241,0.35)]"
               >
-                <Settings className="h-4 w-4" />
-                Budgets
+                <Plus className="w-4 h-4" />
+                Add Expense
               </Link>
             </div>
           </div>
         </Reveal>
+
+        {/* ── Error Banner ── */}
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-[var(--destructive)]/10 border border-[var(--destructive)]/30 text-[var(--destructive)] text-sm">
+            {error}
+          </div>
+        )}
 
         {/* ── Summary Cards ── */}
         <motion.div
           variants={staggerContainer}
           initial="hidden"
           animate="visible"
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-10"
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8"
         >
           {summaryCards.map((card) => (
             <motion.div
               key={card.label}
               variants={fadeInUp}
-              className="glass rounded-2xl p-5 border border-[var(--border)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.2)]"
+              className="glass rounded-2xl p-5 border border-[var(--border)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]"
             >
               <div className="flex items-start justify-between mb-3">
                 <div
-                  className="flex h-10 w-10 items-center justify-center rounded-xl"
-                  style={{ backgroundColor: card.color + "22" }}
+                  className="w-10 h-10 rounded-xl flex items-center justify-center"
+                  style={{ background: `${card.color}22` }}
                 >
-                  <card.icon
-                    className="h-5 w-5"
-                    style={{ color: card.color }}
-                    aria-hidden="true"
-                  />
+                  <card.icon className="w-5 h-5" style={{ color: card.color }} />
                 </div>
-                {card.trend === "up" ? (
-                  <TrendingUp className="h-4 w-4 text-[var(--destructive)]" aria-hidden="true" />
-                ) : (
-                  <TrendingDown className="h-4 w-4 text-[#10B981]" aria-hidden="true" />
-                )}
               </div>
-              <p className="text-xs text-[var(--muted-foreground)] mb-1">{card.label}</p>
-              <p className="text-xl font-bold text-[var(--foreground)] tracking-tight truncate">
+              <p className="text-xs text-[var(--muted-foreground)] mb-1 font-medium uppercase tracking-wide">
+                {card.label}
+              </p>
+              <p className="text-2xl font-bold text-[var(--foreground)] tracking-tight">
                 {card.value}
               </p>
-              <p className="mt-1 text-xs text-[var(--muted-foreground)]">{card.sub}</p>
             </motion.div>
           ))}
         </motion.div>
 
-        {/* ── Charts Row ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">
-          {/* Bar Chart */}
-          <Reveal className="lg:col-span-2">
-            <div className="glass rounded-2xl border border-[var(--border)] p-6 h-full">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-base font-semibold text-[var(--foreground)]">
-                  Weekly Spending
-                </h2>
-                <span className="text-xs text-[var(--muted-foreground)]">
-                  {now.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-                </span>
-              </div>
-              {loading ? (
-                <div className="flex items-center justify-center h-48">
-                  <div className="h-8 w-8 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
+        {/* ── Empty State or Charts + Table ── */}
+        {!hasExpenses ? (
+          <EmptyState />
+        ) : (
+          <>
+            {/* ── Charts Row ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              {/* Bar Chart */}
+              <Reveal className="lg:col-span-2">
+                <div className="glass rounded-2xl p-6 border border-[var(--border)] h-full shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-base font-semibold text-[var(--foreground)]">Monthly Overview</h2>
+                    <TrendingUp className="w-4 h-4 text-[var(--muted-foreground)]" />
+                  </div>
+                  <ResponsiveContainer width="100%" height={220}>
+                    <BarChart data={barData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis
+                        dataKey="label"
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "var(--muted-foreground)", fontSize: 12 }}
+                        axisLine={false}
+                        tickLine={false}
+                        tickFormatter={(v) => `$${v}`}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "var(--card)",
+                          border: "1px solid var(--border)",
+                          borderRadius: "12px",
+                          color: "var(--foreground)",
+                          fontSize: 13,
+                        }}
+                        formatter={(value: number) => [formatCurrency(value), "Spent"]}
+                      />
+                      <Bar dataKey="amount" fill="var(--primary)" radius={[6, 6, 0, 0]} maxBarSize={48} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <BarChart data={barData} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#2E2E4A" vertical={false} />
-                    <XAxis
-                      dataKey="label"
-                      tick={{ fill: "#94A3B8", fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fill: "#94A3B8", fontSize: 12 }}
-                      axisLine={false}
-                      tickLine={false}
-                      tickFormatter={(v: number) => `$${v}`}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        background: "#1A1A2E",
-                        border: "1px solid #2E2E4A",
-                        borderRadius: "12px",
-                        color: "#F1F5F9",
-                        fontSize: 13,
-                      }}
-                      formatter={(value: number) => [formatCurrency(value), "Spent"]}
-                    />
-                    <Bar
-                      dataKey="amount"
-                      fill="#6366F1"
-                      radius={[6, 6, 0, 0]}
-                      maxBarSize={48}
-                    />
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </Reveal>
+              </Reveal>
 
-          {/* Pie Chart */}
-          <Reveal>
-            <div className="glass rounded-2xl border border-[var(--border)] p-6 h-full">
-              <h2 className="text-base font-semibold text-[var(--foreground)] mb-6">
-                By Category
-              </h2>
-              {loading ? (
-                <div className="flex items-center justify-center h-48">
-                  <div className="h-8 w-8 rounded-full border-2 border-[var(--primary)] border-t-transparent animate-spin" />
-                </div>
-              ) : pieData.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-48 text-[var(--muted-foreground)] text-sm">
-                  <span className="text-3xl mb-2">📊</span>
-                  No data yet
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height={220}>
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={55}
-                      outerRadius={85}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip
-                      contentStyle={{
-                        background: "#1A1A2E",
-                        border: "1px solid #2E2E4A",
-                        borderRadius: "12px",
-                        color: "#F1F5F9",
-                        fontSize: 13,
-                      }}
-                      formatter={(value: number) => [formatCurrency(value), "Spent"]}
-                    />
-                    <Legend
-                      iconType="circle"
-                      iconSize={8}
-                      formatter={(value: string) => (
-                        <span style={{ color: "#94A3B8", fontSize: 12 }}>{value}</span>
-                      )}
-                    />
-                  </PieChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-          </Reveal>
-        </div>
-
-        {/* ── Budget Progress ── */}
-        <Reveal className="mb-10">
-          <div className="glass rounded-2xl border border-[var(--border)] p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-base font-semibold text-[var(--foreground)]">
-                Budget Progress
-              </h2>
-              <Link
-                href="/budget"
-                className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1"
-              >
-                Manage <ArrowRight className="h-3 w-3" />
-              </Link>
-            </div>
-            {budgets.length === 0 ? (
-              <p className="text-sm text-[var(--muted-foreground)]">
-                No budgets set.{" "}
-                <Link href="/budget" className="text-[var(--primary)] hover:underline">
-                  Set one now.
-                </Link>
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {budgets.slice(0, 6).map((budget) => {
-                  const cat = categories.find((c) => c.id === budget.category_id);
-                  const spent = monthlyExpenses
-                    .filter((e) => e.category_id === budget.category_id)
-                    .reduce((sum, e) => sum + (parseFloat(e.amount) || 0), 0);
-                  const limit = parseFloat(budget.monthly_limit) || 0;
-                  const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
-                  const isOver = spent > limit && limit > 0;
-
-                  return (
-                    <div
-                      key={budget.id}
-                      className="rounded-xl border border-[var(--border)] bg-[var(--background)]/50 p-4"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="text-lg">{cat?.icon ?? "📦"}</span>
-                          <span className="text-sm font-medium text-[var(--foreground)] truncate">
-                            {cat?.name ?? "Category"}
-                          </span>
-                        </div>
-                        <span
-                          className="text-xs font-semibold"
-                          style={{ color: isOver ? "#DC2626" : "#10B981" }}
+              {/* Pie Chart */}
+              <Reveal>
+                <div className="glass rounded-2xl p-6 border border-[var(--border)] h-full shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-base font-semibold text-[var(--foreground)]">Category Breakdown</h2>
+                    <TrendingDown className="w-4 h-4 text-[var(--muted-foreground)]" />
+                  </div>
+                  {pieData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={220}>
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={85}
+                          paddingAngle={3}
+                          dataKey="value"
                         >
-                          {pct.toFixed(0)}%
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[var(--border)] overflow-hidden mb-2">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{
-                            width: `${pct}%`,
-                            backgroundColor: isOver ? "#DC2626" : cat?.color ?? "#6366F1",
+                          {pieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{
+                            background: "var(--card)",
+                            border: "1px solid var(--border)",
+                            borderRadius: "12px",
+                            color: "var(--foreground)",
+                            fontSize: 13,
                           }}
+                          formatter={(value: number) => [formatCurrency(value), "Spent"]}
                         />
-                      </div>
-                      <div className="flex justify-between text-xs text-[var(--muted-foreground)]">
-                        <span>{formatCurrency(spent)}</span>
-                        <span>of {formatCurrency(limit)}</span>
-                      </div>
+                        <Legend
+                          iconType="circle"
+                          iconSize={8}
+                          wrapperStyle={{ fontSize: 12, color: "var(--muted-foreground)" }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="flex items-center justify-center h-[220px] text-[var(--muted-foreground)] text-sm">
+                      No data for this month
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </Reveal>
-
-        {/* ── Recent Expenses ── */}
-        <Reveal>
-          <div className="glass rounded-2xl border border-[var(--border)] p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-base font-semibold text-[var(--foreground)]">
-                Recent Expenses
-              </h2>
-              <Link
-                href="/expenses"
-                className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1"
-              >
-                View all <ArrowRight className="h-3 w-3" />
-              </Link>
+                  )}
+                </div>
+              </Reveal>
             </div>
 
-            {loading ? (
-              <div className="space-y-3">
-                {[1, 2, 3].map((i) => (
-                  <div
-                    key={i}
-                    className="h-14 rounded-xl bg-[var(--border)]/30 animate-pulse"
-                  />
-                ))}
-              </div>
-            ) : recentExpenses.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center">
-                <span className="text-4xl mb-3">💸</span>
-                <p className="text-sm text-[var(--muted-foreground)]">
-                  No expenses yet.{" "}
-                  <Link
-                    href="/expenses/add"
-                    className="text-[var(--primary)] hover:underline"
-                  >
-                    Add your first one.
-                  </Link>
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {recentExpenses.map((expense) => {
-                  const cat = categories.find((c) => c.id === expense.category_id);
-                  return (
-                    <div
-                      key={expense.id}
-                      className="flex items-center justify-between rounded-xl border border-[var(--border)] bg-[var(--background)]/40 px-4 py-3 hover:border-[var(--primary)]/40 transition-colors duration-200"
+            {/* ── Budget Progress ── */}
+            {budgets.length > 0 && (
+              <Reveal>
+                <div className="glass rounded-2xl p-6 border border-[var(--border)] mb-8 shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]">
+                  <div className="flex items-center justify-between mb-6">
+                    <h2 className="text-base font-semibold text-[var(--foreground)]">Budget Progress</h2>
+                    <Link
+                      href="/budget-settings"
+                      className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1"
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div
-                          className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl text-base"
-                          style={{ backgroundColor: (cat?.color ?? "#94A3B8") + "22" }}
-                        >
-                          {cat?.icon ?? "📦"}
+                      Manage <ArrowRight className="w-3 h-3" />
+                    </Link>
+                  </div>
+                  <div className="space-y-4">
+                    {budgets.slice(0, 5).map((budget) => {
+                      const cat = categories.find((c) => c.id === budget.category_id);
+                      const staticCat = EXPENSE_CATEGORIES.find((c) => cat && c.name === cat.name);
+                      const spent = thisMonthExpenses
+                        .filter((e) => e.category_id === budget.category_id)
+                        .reduce((s, e) => s + (parseFloat(e.amount) || 0), 0);
+                      const limit = parseFloat(budget.monthly_limit) || 0;
+                      const pct = limit > 0 ? Math.min((spent / limit) * 100, 100) : 0;
+                      const isOver = spent > limit && limit > 0;
+                      return (
+                        <div key={budget.id}>
+                          <div className="flex items-center justify-between mb-1.5">
+                            <div className="flex items-center gap-2">
+                              <span className="text-base">{cat?.icon ?? staticCat?.icon ?? "📦"}</span>
+                              <span className="text-sm font-medium text-[var(--foreground)]">
+                                {cat?.name ?? "Unknown"}
+                              </span>
+                            </div>
+                            <div className="text-xs text-[var(--muted-foreground)]">
+                              <span className={isOver ? "text-[var(--destructive)] font-semibold" : ""}>
+                                {formatCurrency(spent)}
+                              </span>
+                              {" / "}
+                              {formatCurrency(limit)}
+                            </div>
+                          </div>
+                          <div className="h-2 rounded-full bg-[var(--border)] overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{
+                                width: `${pct}%`,
+                                background: isOver ? "var(--destructive)" : staticCat?.color ?? "var(--primary)",
+                              }}
+                            />
+                          </div>
                         </div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-medium text-[var(--foreground)] truncate">
-                            {expense.title}
-                          </p>
-                          <p className="text-xs text-[var(--muted-foreground)]">
-                            {cat?.name ?? "Other"} &middot; {formatDate(expense.expense_date)}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 flex-shrink-0">
-                        <span className="text-sm font-semibold text-[var(--foreground)]">
-                          {formatCurrency(parseFloat(expense.amount) || 0, expense.currency)}
-                        </span>
-                        <Link
-                          href={`/expenses/add?id=${expense.id}`}
-                          className="text-[var(--muted-foreground)] hover:text-[var(--primary)] transition-colors duration-200"
-                          aria-label="Edit expense"
-                        >
-                          <List className="h-4 w-4" />
-                        </Link>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </Reveal>
-
-        {/* ── Quick Actions ── */}
-        <Reveal className="mt-6">
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { label: "Add Expense", href: "/expenses/add", icon: Plus, color: "#6366F1" },
-              { label: "View Expenses", href: "/expenses", icon: List, color: "#F59E0B" },
-              { label: "Analytics", href: "/analytics", icon: TrendingUp, color: "#10B981" },
-              { label: "Budget Settings", href: "/budget", icon: Settings, color: "#8B5CF6" },
-            ].map((action) => (
-              <Link
-                key={action.label}
-                href={action.href}
-                className="glass flex flex-col items-center gap-2 rounded-2xl border border-[var(--border)] p-4 text-center hover:border-[var(--primary)]/50 transition-all duration-200 group"
-              >
-                <div
-                  className="flex h-10 w-10 items-center justify-center rounded-xl transition-transform duration-200 group-hover:scale-110"
-                  style={{ backgroundColor: action.color + "22" }}
-                >
-                  <action.icon
-                    className="h-5 w-5"
-                    style={{ color: action.color }}
-                    aria-hidden="true"
-                  />
+                      );
+                    })}
+                  </div>
                 </div>
-                <span className="text-xs font-medium text-[var(--foreground)]">
-                  {action.label}
-                </span>
-              </Link>
-            ))}
-          </div>
-        </Reveal>
+              </Reveal>
+            )}
+
+            {/* ── Recent Expenses ── */}
+            <Reveal>
+              <div className="glass rounded-2xl border border-[var(--border)] shadow-[0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-8px_rgba(0,0,0,0.18)]">
+                <div className="flex items-center justify-between px-6 py-5 border-b border-[var(--border)]">
+                  <h2 className="text-base font-semibold text-[var(--foreground)]">Recent Expenses</h2>
+                  <Link
+                    href="/expenses"
+                    className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1"
+                  >
+                    View all <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+                <div className="divide-y divide-[var(--border)]">
+                  {recentExpenses.map((exp) => {
+                    const cat = categories.find((c) => c.id === exp.category_id);
+                    const staticCat = EXPENSE_CATEGORIES.find((c) => cat && c.name === cat.name);
+                    return (
+                      <div
+                        key={exp.id}
+                        className="flex items-center justify-between px-6 py-4 hover:bg-white/[0.02] transition-colors duration-150"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div
+                            className="w-9 h-9 rounded-xl flex items-center justify-center text-base flex-shrink-0"
+                            style={{ background: `${cat?.color ?? staticCat?.color ?? "#94A3B8"}22` }}
+                          >
+                            {cat?.icon ?? staticCat?.icon ?? "📦"}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-[var(--foreground)] leading-tight">
+                              {exp.title}
+                            </p>
+                            <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                              {cat?.name ?? "Uncategorized"} · {formatDate(exp.expense_date)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-semibold text-[var(--foreground)]">
+                            {formatCurrency(parseFloat(exp.amount) || 0, exp.currency)}
+                          </p>
+                          <p className="text-xs text-[var(--muted-foreground)] mt-0.5 uppercase">
+                            {exp.currency}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </Reveal>
+          </>
+        )}
       </div>
     </div>
   );

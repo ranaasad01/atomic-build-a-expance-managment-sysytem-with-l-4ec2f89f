@@ -42,6 +42,7 @@ export const CURRENCIES = [
   { code: "GBP", symbol: "£", label: "British Pound" },
   { code: "INR", symbol: "₹", label: "Indian Rupee" },
   { code: "AED", symbol: "د.إ", label: "UAE Dirham" },
+  { code: "PKR", symbol: "Rs", label: "Pakistani Rupee" },
 ] as const;
 
 export type CurrencyCode = (typeof CURRENCIES)[number]["code"];
